@@ -230,9 +230,9 @@ report = {"objects": len(bpy.data.objects), "meshes": sum(1 for o in bpy.data.ob
           "frame_range": [scene.frame_start, scene.frame_end], "action_range": [lo, hi], "offset": OFF, "fps": fps,
           "sound_strips": n_snd,
           "lights": sum(1 for o in bpy.data.objects if o.type == "LIGHT"),
-          "tiles": sum(1 for o in bpy.data.objects if re.match(r"^tile_\d+(_s\d+)?$", o.name)),
-          "cups": sum(1 for o in bpy.data.objects if re.match(r"^cup_\d+(_s\d+)?$", o.name)),
-          "boxes": sum(1 for o in bpy.data.objects if re.match(r"^box_", o.name) and not o.name.endswith(("_vis", "_q"))),
+          "voxels": sum(1 for o in bpy.data.objects if re.match(r"^vox_[a-z]+_\d+_\d+_\d+$", o.name)),
+          "shooters": sum(1 for o in bpy.data.objects if re.match(r"^shooter_\d+$", o.name)),
+          "numbers": sum(1 for o in bpy.data.objects if re.match(r"^shooter_\d+_num_\d+$", o.name)),
           "camera": scene.camera.name if scene.camera else None, "resolution": [scene.render.resolution_x, scene.render.resolution_y]}
 
 os.makedirs(OUT, exist_ok=True)
@@ -254,6 +254,16 @@ opacity_node = {}
 for m in MATS:
     opacity_node[m.name] = rebuild(m)
 report["materials"] = len(opacity_node)
+# 描边（three.js 反面外壳 BackSide）：Cycles 不做背面剔除 → 正面透明、背面深色自发光（仅相机光线），与网页一致
+for m in bpy.data.materials:
+    if m.users and m.name.startswith("pbr_outline"):
+        m.use_nodes = True; nt = m.node_tree; nt.nodes.clear(); N, Lk = nt.nodes, nt.links
+        out = N.new("ShaderNodeOutputMaterial"); geo = N.new("ShaderNodeNewGeometry"); mix = N.new("ShaderNodeMixShader")
+        tr = N.new("ShaderNodeBsdfTransparent"); em = N.new("ShaderNodeEmission"); em.inputs[0].default_value = (0.0065, 0.0052, 0.009, 1)
+        lp = N.new("ShaderNodeLightPath"); mul = N.new("ShaderNodeMath"); mul.operation = "MULTIPLY"  # 只对相机光线显示（阴影 / 反射光线穿过）
+        Lk.new(geo.outputs["Backfacing"], mul.inputs[0]); Lk.new(lp.outputs["Is Camera Ray"], mul.inputs[1]); Lk.new(mul.outputs[0], mix.inputs[0]); Lk.new(tr.outputs[0], mix.inputs[1]); Lk.new(em.outputs[0], mix.inputs[2]); Lk.new(mix.outputs[0], out.inputs[0])
+        m.blend_method = "HASHED" if hasattr(m, "blend_method") else None
+        report["outline_mats"] = report.get("outline_mats", 0) + 1
 # 网页在 sRGB 空间混合，Blender 在线性空间混合：纯黑压暗层（开场压暗）按 sRGB 等效换算，使变暗程度一致
 def srgb_to_lin(c):
     return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4

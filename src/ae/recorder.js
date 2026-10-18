@@ -39,7 +39,7 @@ export function createAERecorder(api) {
     for (const it of E.items) {
       const key = it.id + '|' + it.asset; let tr = R.tracks.get(key);
       if (!tr) { tr = { id: it.id, asset: it.asset, z: it.z, s: [], order: R.tracks.size }; R.tracks.set(key, tr); }
-      tr.s.push(it.w ? [t, r3(it.x), r3(it.y), r3(it.sx), r3(it.sy), r3(it.rot), r3(it.op), f, r3(it.lift || 0), r3(it.z), r3(it.w[0]), r3(it.w[1]), r3(it.w[2]), r3(it.wk ?? 1)] : [t, r3(it.x), r3(it.y), r3(it.sx), r3(it.sy), r3(it.rot), r3(it.op), f, r3(it.lift || 0), r3(it.z)]); // [10..13] = 世界锚点 + 缩放（v1.2.1，3D 导出 / AE 3D 外观用）
+      tr.s.push(it.w ? [t, r3(it.x), r3(it.y), r3(it.sx), r3(it.sy), r3(it.rot), r3(it.op), f, r3(it.lift || 0), r3(it.z), r3(it.w[0]), r3(it.w[1]), r3(it.w[2]), r3(it.ws ?? it.wk ?? 1), r3(it.wsy ?? 1), r3(it.rx || 0), r3(it.ry || 0), it.num ?? -1] : [t, r3(it.x), r3(it.y), r3(it.sx), r3(it.sy), r3(it.rot), r3(it.op), f, r3(it.lift || 0), r3(it.z)]); // [10..13] = 世界锚点 + 缩放（v1.2.1，3D 导出 / AE 3D 外观用）
       if (it.num != null) (tr.n || (tr.n = [])).push([t, it.num, r3(it.numOp ?? 1), r3(it.lx), r3(it.ly), r3(it.lsx || 1)]); // 炮台数字（AE 文本图层，源文字定格关键帧） // 纸箱：尺寸 / 翻盖角度 / 阶段（3D 导出与 AE 3D 外观用）
     }
     if (R.snapEvery && f % R.snapEvery === R.snapEvery - 1 && R.snaps.length < R.maxSnaps) R.snaps.push({ t, url: E.canvas.toDataURL('image/png') });

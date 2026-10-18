@@ -9,3 +9,9 @@
 - ✅ 参考关 = 6 列单色队列（黑/绿/紫/黄/绿/黑）全 200 弹药（level.refQueues）；随机/图片关 = 计划生成（保证可解）
 - ✅ npm test（test/run-test.mjs，虚拟时钟）：随机×2 + 参考关 D=4 通关；test/midshot.mjs 中局截图
 - ⏳ 下一步：AE 导出（recorder 适配：方块图层 = 每个可见方块一层 + 消除关键帧；数字 = 文本/素材层）、3D 导出、test:clip、PNG 导入测试、仓库 + Pages
+
+## M4 状态（2026-10-19 04:10 UTC+8）
+- AE：`npm run test:ae` = ae-export（虚拟时钟）+ ae-mock（0 错误，~460 图层 / ~7300 关键帧，80 个方块图层）+ ae-composite（PSNR 平均 ~33 dB，screenshots/ae_export_check.jpg）。数字为 AE 文本图层，字号按投影换算（lsx）。
+- 3D：`npm run test:3d` = E3D=1 ae-export + Blender 无头（glb 导入、FBX 导出、Cycles 渲染 6 帧对比网页 PSNR 22–28 dB，screenshots/export3d_blender_compare.jpg）PASS。
+  export3d.js：block_root 缩放 0.1；voxels/vox_<色>_i_j_k（消除缩放到 0）；dynamic_3d/<id>_vis；数字 = label 下 shooter_NNN_num_<n> 平面 STEP 切换；描边材质 pbr_outline 在 Blender 中用 Backfacing×相机光线。
+- 下一步：test:clip（穿模/对齐逐帧测试）→ test:shape / test:norec / test:cursor → ref_vs_tool.jpg → README → push + Pages 校验。
