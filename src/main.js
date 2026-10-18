@@ -130,7 +130,14 @@ function pickTargetLOS(sh, muz) {
   const top = L.H * Wd.vs;
   for (const arc of [S.ballArc, S.ballArc * 2 + 2, S.ballArc * 4 + 6, -1, -2, -3, -4]) for (let q = 0; q < Math.min(cand.length, 80); q++) { const m = cand[q][1], hp = hitPoint(m, muz), n = hp.nrm;
     const LOB = { '-1': [3, 3], '-2': [10, 1.5], '-3': [10, 5], '-4': [18, 3] }[arc] || [0, 0], hh = top + LOB[0], dd = Wd.vs * LOB[1], ctrl = arc >= 0 ? null : [[muz[0], hh, muz[2]], [hp.p[0] + n[0] * dd, hh, hp.p[2] + n[2] * dd]]; // 沿外露面法线方向从上方落入（侧面 / 坑里的方块）
-    const path = ballPath(muz, hp.p, arc, ctrl); if (clear(path, m)) return { m, hp, path }; } // 先平射，挡住时抬高抛物线越过
+    const path = ballPath(muz, hp.p, arc, ctrl); if (clear(path, m)) return { m, hp, path }; }
+  // 隧道 / 竖井：沿外露面法线逐格走出体块，入口外先对准法线，再直线飞入（参考：中线被打穿后小球沿通道飞进去）
+  for (let q = 0; q < Math.min(cand.length, 80); q++) { const m = cand[q][1], hp = hitPoint(m, muz), n = hp.nrm; const [i0, j0, k0] = coords(L, m); let a = i0, b = j0, c = k0, steps = 0, out = false;
+    while (steps++ < 80) { a += n[0]; b += n[1]; c -= n[2]; if (a < 0 || b < 0 || c < 0 || a >= L.W || b >= L.H || c >= L.D) { out = true; break; } if (st.vox[idx(L, a, b, c)]) break; }
+    if (!out) continue; const E = [hp.p[0] + n[0] * (steps + 0.5) * Wd.vs, hp.p[1] + n[1] * (steps + 0.5) * Wd.vs, hp.p[2] + n[2] * (steps + 0.5) * Wd.vs];
+    for (const lift of [0, 3, 8]) { const dE = Math.hypot(E[0] - muz[0], E[1] - muz[1], E[2] - muz[2]), C = [E[0] + n[0] * dE * 0.5, E[1] + n[1] * dE * 0.5 + lift, E[2] + n[2] * dE * 0.5], A = ballPath(muz, E, 0, C), lB = Math.hypot(E[0] - hp.p[0], E[1] - hp.p[1], E[2] - hp.p[2]), wA = dE / (dE + lB);
+      const path = u => u < wA ? A(u / wA) : (v => [E[0] + (hp.p[0] - E[0]) * v, E[1] + (hp.p[1] - E[1]) * v, E[2] + (hp.p[2] - E[2]) * v])((u - wA) / (1 - wA));
+      if (clear(path, m)) return { m, hp, path }; } } // 先平射，挡住时抬高抛物线越过
   const m = cand[0][1], hp = hitPoint(m, muz); if (window.__dbgBlocked) (window.__blk = window.__blk || []).push({ why: (() => { const hh = top + 10, dd = Wd.vs * 1.5, n2 = hp.nrm, path = ballPath(muz, hp.p, -2, [[muz[0], hh, muz[2]], [hp.p[0] + n2[0] * dd, hh, hp.p[2] + n2[2] * dd]]); for (let q = 1; q <= 200; q++) { const h = sphereHitsVox(path(q / 200), S.ballR + 0.005, -1); if (h) return [q / 200, h.n, coords(L, h.n), path(q / 200).map(x => +x.toFixed(2))]; } return null; })(), n: cand.length, m, c: coords(L, m), nrm: hp.nrm, muz, nb: [[0,1,0],[0,0,-1],[-1,0,0],[1,0,0],[0,0,1]].map(f => { const [i, j, k] = coords(L, m), a = i + f[0], b = j + f[1], c = k + f[2]; return a < 0 || b < 0 || c < 0 || a >= L.W || b >= L.H || c >= L.D ? 'out' : st.vox[idx(L, a, b, c)]; }) }); return { m, hp, path: ballPath(muz, hp.p, S.ballArc * 8 + 12), blocked: true }; // 全部被挡：先等待（其它炮台会打开通路），超时才高抛
 }
 function playShot(t) { shotSfxT = shotSfxT.filter(x => t - x < 1000); if (shotSfxT.length < S.sfxShootMax) { shotSfxT.push(t); sfx.play('shoot', S); } }
