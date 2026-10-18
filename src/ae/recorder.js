@@ -3,7 +3,6 @@
 import { makeZip } from './zip.js';
 import JSX_TEXT from './build_ae_project.jsx';
 import README_TEXT from './README_AE.md';
-import { build3DLook } from './look3d.js';
 import { renderSfxOffline, encodeWav, SFX_NAMES, SFX_DUR } from '../audio.js';
 const r3 = v => Math.round(v * 1000) / 1000;
 const LABEL = { bg: 15, board: 14, tile: 9, flash: 1, cup: 2, box: 11, ui: 15, nice: 5, end: 5, hand: 12, audio: 16 };
@@ -77,20 +76,11 @@ export function createAERecorder(api) {
     // 每个轨道拆成连续出现段
     const segs = [], layers = [], markers = [], comps = [];
     // v1.2：3D 外观（aeLook：auto = 记录时开启 3D 渲染则用 3D；3d；2d = v1.1 的 2D 精灵）
-    const look = S.aeLook === '3d' || (S.aeLook !== '2d' && S.render3d && E.G && E.belt), seqComps = []; let segs2 = segs;
+    const look = false, seqComps = [];
     // v1.2.1：同一元素换了绘制层（杯子从传送带层进入托盘 / 飞行层，纸箱翻盖在杯子上下切换）时也拆段，每段按自己的层级排序
     for (const tr of rec.tracks.values()) {
       const zs = !(look && tr.id.startsWith('box')), zOf = e => e[9] ?? tr.z;
       let a = 0; for (let i = 1; i <= tr.s.length; i++) if (i === tr.s.length || tr.s[i][7] !== tr.s[i - 1][7] + 1 || (zs && Math.abs(zOf(tr.s[i]) - zOf(tr.s[i - 1])) > 0.5)) { const s = tr.s.slice(a, i); segs.push({ tr: zs ? { ...tr, z: zOf(s[0]) } : tr, s }); a = i; }
-    }
-    if (look) {
-      const [w2] = S.aeSize && S.aeSize !== 'canvas' ? S.aeSize.split('x').map(Number) : [E.canvas.width];
-      const Kr = Math.min(2, Math.max(1, Math.round(w2 / CW * 100) / 100));
-      const L3 = await build3DLook({ rec, S, G: E.G, belt: E.belt, fps, Kr, segs });
-      AS2 = { ...AS, ...L3.assets }; segs2 = L3.segs; segs.length = 0; segs.push(...segs2);
-      for (const q of L3.seqs) for (const f of q.ls) assetFor(f.asset);
-      for (const q of L3.seqs) comps.push({ id: q.id, name: (zh ? '纸箱3D序列_' : 'Box3D_seq_') + q.variant, w: CW, h: CH, duration: r4(q.n / fps), fps, folder: 'pre', layers: q.ls.map((f, k) => ({ name: (zh ? '帧_' : 'Frame_') + String(k).padStart(3, '0'), src: { asset: f.asset }, in: r4(f.in), out: r4(f.out), label: LABEL.box, tr: { anchor: [0, 0], position: rnd(f.pos), scale: [100 / Kr, 100 / Kr] } })) });
-      for (const b of L3.boxLayers) seqComps.push({ z: b.z, layer: { name: (zh ? '纸箱_' : 'Box_') + b.i + (zh ? ' 3D序列' : ' 3D sequence'), src: { comp: b.seq.id }, start: r4(b.start), in: r4(b.start), out: r4(Math.min(D, b.end)), label: LABEL.box } });
     }
     const nSeg = new Map(); segs.forEach(g => nSeg.set(g.tr.id + '|' + g.tr.asset, (nSeg.get(g.tr.id + '|' + g.tr.asset) || 0) + 1));
     segs.sort((p, q) => p.tr.z - q.tr.z || p.tr.order - q.tr.order || p.s[0][0] - q.s[0][0]);

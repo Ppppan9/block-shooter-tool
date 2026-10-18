@@ -10,7 +10,7 @@ export function rng(seed) { let s = (seed >>> 0) || 1; return () => { s ^= s << 
 // 参考关卡：31×12×46，紫色外壳；顶面绿色菱形（中心 k=15，半对角 x 12.3 / z 13.75，内部向下收窄成“漏斗/树”），正面中线 1 格宽绿色竖条；
 // 中线（菱形后角之后）顶层黑色、下面黄色的竖直夹层
 export function refVolume(o = {}) {
-  const W = o.W || 31, H = o.H || 12, D = o.D || 46, L = { W, H, D, vox: new Uint8Array(W * H * D), palette: ['purple', 'green', 'black', 'yellow'] };
+  const W = o.W || 31, H = o.H || 13, D = o.D || 46, L = { W, H, D, vox: new Uint8Array(W * H * D), palette: ['purple', 'green', 'black', 'yellow'] };
   const cx = (W - 1) / 2, kc = 15, rx = 12.3, rz = 13.75, top = H - 2, r = rng(7);
   for (let k = 0; k < D; k++) for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
     let c = 0; const di = Math.abs(i - cx), dk = Math.abs(k - kc), dd = di / rx + dk / rz;
@@ -18,7 +18,7 @@ export function refVolume(o = {}) {
     const shrink = Math.pow((top - j) / top, 0.8); // 漏斗：越往下越窄
     if (j <= top && dd <= 1 - shrink * 0.95) c = 2;
     if (j <= top && di < 0.5 && k <= kc) c = 2; // 正面竖条 / 夹层（绿）
-    if (di < 0.5 && k > kc + rz * 0.98 && j <= top) c = j === top ? 3 : 4; // 中线黑/黄夹层
+    if (di < 0.5 && k > kc && j <= top && (k > kc + rz * 0.98 || j >= top - 1)) c = j === top ? 3 : (k > kc + rz * 0.98 || j < top - 1 ? 4 : 3); // 中线黑（顶层，菱形内两层）/ 黄（黑色下面）夹层
     if (j === H - 1) c = (dd <= 0.92 && r() < 0.38 && !(di < 0.5 && k > kc)) ? 2 : 0; // 菱形内凸起一层
     L.vox[idx(L, i, j, k)] = c;
   }
@@ -38,7 +38,7 @@ export function initState(L) {
 }
 export const coords = (L, n) => { const i = n % L.W, j = Math.floor(n / L.W) % L.H, k = Math.floor(n / (L.W * L.H)); return [i, j, k]; };
 export function removeVoxel(L, st, n) {
-  const v = st.vox[n]; if (!v) return false; st.vox[n] = 0; st.exp[v - 1].delete(n); st.left[v - 1]--; st.total--; st.claimed[n] = 0;
+  const v = st.vox[n]; if (!v) return false; st.vox[n] = 0; st.ver = (st.ver || 0) + 1; st.exp[v - 1].delete(n); st.left[v - 1]--; st.total--; st.claimed[n] = 0;
   const [i, j, k] = coords(L, n);
   for (const [a, b, c] of [[i + 1, j, k], [i - 1, j, k], [i, j + 1, k], [i, j - 1, k], [i, j, k + 1], [i, j, k - 1]]) {
     if (a < 0 || b < 0 || c < 0 || a >= L.W || b >= L.H || c >= L.D) continue; const m = idx(L, a, b, c), w = st.vox[m]; if (w && !st.exp[w - 1].has(m) && exposedAt(L, st.vox, a, b, c)) st.exp[w - 1].add(m);
@@ -101,6 +101,17 @@ export function randomVolume(o = {}) {
   for (let k = 0; k < D; k++) for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { let c = 1; for (const b of blobs) if ((i - b[0]) ** 2 + (j - b[1]) ** 2 + (k - b[2]) ** 2 < b[4] ** 2) c = b[3]; L.vox[idx(L, i, j, k)] = c; }
   return L;
 }
+// 参考关：6 列单色队列（参考队首 黑/绿/紫/黄/绿/黑，整列同色），全部 200 弹药；数量 = 该色所需 + 补满可见行。
+// 多出的弹药：该色方块全部消除后炮台直接离场（规则见 ANALYSIS.md）；自动通关按“外露可打数最多的颜色”动态点击。
+export function refQueues(vol, o = {}) {
+  const prefs = o.prefs || ['black', 'green', 'purple', 'yellow', 'green', 'black'], ammo = o.maxAmmo || 200, minRows = o.minRows || 18, Q = prefs.map(() => []);
+  const need = vol.palette.map((p, c) => Math.ceil(vol.vox.reduce((a, v) => a + (v === c + 1 ? 1 : 0), 0) / ammo));
+  let id = 0; const cols = c => prefs.map((p, i) => i).filter(i => prefs[i] === vol.palette[c]);
+  vol.palette.forEach((p, c) => { const cs = cols(c); for (let q = 0; q < need[c]; q++) Q[cs[q % cs.length]].push({ color: c, ammo, id: id++ }); });
+  Q.forEach((q, ci) => { const c = vol.palette.indexOf(prefs[ci]); while (q.length < minRows) q.push({ color: c, ammo, id: id++ }); });
+  const plan = Q.flat().sort((a, b) => a.id - b.id);
+  return { ...vol, plan, queues: Q, voxels: vol.vox.reduce((a, v) => a + (v ? 1 : 0), 0), dynamic: true };
+}
 export function makeLevel(vol, o = {}) {
   const plan = planShooters(vol, o); if (!plan) return null;
   const queues = distribute(plan, COLS, o.seed || 1, o.prefs ? o.prefs.map(n => vol.palette.indexOf(n)) : null);
@@ -111,6 +122,7 @@ export function simulate(L, o = {}) {
   const st = initState(L), K = o.parallel || 3, fronts = L.queues.map(() => 0), slots = new Array(SLOTS).fill(null), worldOf = o.worldOf || (m => { const [i, j, k] = coords(L, m); return [i, j, -k]; });
   let taps = 0, shots = 0, ticks = 0;
   const order = L.plan.slice();
+  if (L.dynamic) return simulateDynamic(L, o);
   while (st.total > 0 && ticks++ < 1e6) {
     const busy = slots.filter(Boolean).length;
     if (busy < K && order.length) { const s = order[0], c = L.queues.findIndex((q, ci) => q[fronts[ci]] === s); if (c < 0) return { ok: false, reason: 'order' }; const si = slots.indexOf(null); if (si < 0) return { ok: false, reason: 'full' }; slots[si] = { s, left: s.ammo, si }; fronts[c]++; order.shift(); taps++; continue; }
@@ -118,6 +130,23 @@ export function simulate(L, o = {}) {
     for (const sl of slots) { if (!sl) continue; const m = pickTarget(L, st, sl.s.color, sl.si * 3 - 6, 6, 0, worldOf); if (m < 0) continue; removeVoxel(L, st, m); sl.left--; shots++; fired++; if (!sl.left) slots[sl.si] = null; }
     if (!fired && !order.length) return { ok: false, reason: 'stuck', left: st.total };
     if (!fired && slots.filter(Boolean).length >= K) return { ok: false, reason: 'stall', left: st.total };
+  }
+  return { ok: st.total === 0, taps, shots };
+}
+
+// 参考关（动态）：每次点“外露未预定数最多”的颜色的队首；该色清空后炮台离场
+export function simulateDynamic(L, o = {}) {
+  const st = initState(L), K = o.parallel || 3, fronts = L.queues.map(() => 0), slots = new Array(SLOTS).fill(null), worldOf = o.worldOf || (m => { const [i, j, k] = coords(L, m); return [i, j, -k]; });
+  let taps = 0, shots = 0, ticks = 0;
+  while (st.total > 0 && ticks++ < 2e6) {
+    for (const sl of slots) if (sl && st.left[sl.s.color] === 0) slots[sl.si] = null;
+    const busy = slots.filter(Boolean).length;
+    if (busy < K) { let bc = -1, ba = 0; L.queues.forEach((q, c) => { const s = q[fronts[c]]; if (!s) return; const out = slots.filter(x => x && x.s.color === s.color).reduce((a, x) => a + x.left, 0), a = availCount(st, s.color, out); if (a > ba) { ba = a; bc = c; } });
+      if (bc >= 0) { const s = L.queues[bc][fronts[bc]], si = slots.indexOf(null); slots[si] = { s, left: s.ammo, si }; fronts[bc]++; taps++; continue; } }
+    let fired = 0;
+    for (const sl of slots) { if (!sl) continue; const m = pickTarget(L, st, sl.s.color, sl.si * 3 - 6, 6, 0, worldOf); if (m < 0) continue; removeVoxel(L, st, m); sl.left--; shots++; fired++; if (!sl.left) slots[sl.si] = null; }
+    if (!fired && slots.every(x => !x) ) return { ok: false, reason: 'stuck', left: st.total };
+    if (!fired && slots.filter(Boolean).length >= SLOTS) return { ok: false, reason: 'full', left: st.total };
   }
   return { ok: st.total === 0, taps, shots };
 }

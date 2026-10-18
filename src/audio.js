@@ -1,6 +1,6 @@
-// WebAudio 合成音效（无版权素材）：啵(按下)、滑动呼呼、落杯、纸箱合盖、Nice 提示音、错误蜂鸣。所有输出接 master，可送往录制流。
-export const SFX_NAMES = { pop: ['sfxPop', '按下'], whoosh: ['sfxWhoosh', '滑动'], cup: ['sfxCup', '落杯'], box: ['sfxBox', '纸箱合盖'], chime: ['sfxChime', 'Nice提示'], error: ['sfxError', '错误'] };
-export const SFX_DUR = { pop: 0.15, whoosh: 0.4, cup: 0.2, box: 0.35, chime: 0.9, error: 0.35 };
+// WebAudio 合成音效（无版权素材）：啵(点击/跳入槽位)、射击、命中、离场呼呼、通关提示音、失败蜂鸣。所有输出接 master，可送往录制流。
+export const SFX_NAMES = { pop: ['sfxPop', '点击'], shoot: ['sfxShoot', '射击'], hit: ['sfxHit', '命中'], whoosh: ['sfxWhoosh', '离场'], chime: ['sfxChime', '通关'], error: ['sfxError', '失败'] };
+export const SFX_DUR = { pop: 0.15, shoot: 0.08, hit: 0.08, whoosh: 0.4, chime: 0.9, error: 0.35 };
 export class Sfx {
   constructor() { this.ctx = null; }
   ensure() {
@@ -25,6 +25,8 @@ export class Sfx {
   nz(t, type, f0, f1, q, dur, vol, a = 0.005) { const c = this.ctx, s = c.createBufferSource(); s.buffer = this.noise; const f = c.createBiquadFilter(); f.type = type; f.frequency.setValueAtTime(f0, t); f.frequency.exponentialRampToValueAtTime(f1, t + dur); f.Q.value = q; const g = c.createGain(); this.env(g, t, a, vol, dur); s.connect(f); f.connect(g); g.connect(this.master); s.start(t); s.stop(t + a + dur + 0.02); }
   _pop(t, v) { this.osc(t, 'sine', 520, 180, 0.09, v * 0.55); this.nz(t, 'bandpass', 2400, 900, 2, 0.05, v * 0.25); }
   _whoosh(t, v, o) { const d = Math.min(0.6, Math.max(0.15, o.dur || 0.3)); this.nz(t, 'bandpass', 500, 1600, 1.2, d, v * 0.22, d * 0.4); }
+  _shoot(t, v) { this.osc(t, 'square', 1250, 620, 0.045, v * 0.07); this.nz(t, 'highpass', 4000, 2500, 1, 0.03, v * 0.08); }
+  _hit(t, v) { this.osc(t, 'triangle', 520, 300, 0.05, v * 0.16); this.nz(t, 'bandpass', 1800, 700, 2, 0.04, v * 0.14); }
   _cup(t, v) { this.osc(t, 'triangle', 900, 420, 0.07, v * 0.35); this.nz(t, 'highpass', 3000, 2000, 1, 0.04, v * 0.2); this.osc(t + 0.03, 'sine', 300, 160, 0.08, v * 0.3); }
   _box(t, v) { this.nz(t, 'lowpass', 1800, 400, 1, 0.12, v * 0.5); this.nz(t + 0.13, 'lowpass', 1400, 300, 1, 0.14, v * 0.55); this.osc(t + 0.13, 'sine', 140, 80, 0.12, v * 0.4); }
   _chime(t, v) { [784, 988, 1319].forEach((f, i) => { this.osc(t + i * 0.08, 'sine', f, f, 0.55, v * 0.22, 0.006); this.osc(t + i * 0.08, 'sine', f * 2, f * 2, 0.25, v * 0.06, 0.006); }); }
