@@ -3,7 +3,8 @@ import { GROUPS, DEFS, loadSettings, saveSettings, migrate, exportJSON, APP_ID }
 import { mk, drawBackground, drawDisclaimer, drawResult, drawEnd } from './render2d.js';
 import { Sfx } from './audio.js';
 import { DEFAULT_HAND } from './default_hand.js';
-import { create3D, IS3D, colorHex } from './three/scene3d.js';
+import { create3D, IS3D, colorHex, makeShooter, geos } from './three/scene3d.js';
+import * as THREE from 'three';
 import { createWorld, DW, DH, SH } from './world.js';
 import { createAERecorder } from './ae/recorder.js';
 import { export3D } from './export3d/export3d.js';
@@ -79,10 +80,12 @@ function rebuild() {
 
 // ---------- 规则 / 动画 ----------
 const slotPos = i => Wd.slots[i];
+// 炮台模型真实包围盒（不含数字标签；底面中心为原点）——小球碰撞与穿模测试共用
+function shooterBox() { const key = Wd.SH.w + '|' + S.outline3d; if (shooterBox.k !== key) { const m = makeShooter(S, 'green', Wd); m.remove(m.userData.label); m.updateMatrixWorld(true); const b = new THREE.Box3().setFromObject(m); shooterBox.k = key; shooterBox.v = { x0: b.min.x, x1: b.max.x, y0: b.min.y, y1: b.max.y, z0: b.min.z, z1: b.max.z, parts: m.children.map(c => { const q = new THREE.Box3().setFromObject(c); return { name: c.name, x0: q.min.x, x1: q.max.x, y0: q.min.y, y1: q.max.y, z0: q.min.z, z1: q.max.z }; }) }; } return shooterBox.v; }
 function shooterWorld(sh, t) { // 炮台底面中心世界坐标 + 缩放
   const [qx, qz] = Wd.queuePos(sh.col, 0);
   if (sh.state === 'queue') { const p = easeIO((t - sh.rowT) / S.advanceDur), r = sh.rowFrom + (sh.row - sh.rowFrom) * p, q = Wd.queuePos(sh.col, r); return { x: q[0], y: 0, z: q[1], s: 1 }; }
-  if (sh.state === 'jump') { const p = clamp01((t - sh.t0) / S.jumpDur), e = easeIO(p), [sx, sz] = slotPos(sh.slot); return { x: qx + (sx - qx) * e, y: Math.sin(Math.PI * p) * S.jumpHeight, z: qz + (sz - qz) * e, s: 1 }; }
+  if (sh.state === 'jump') { const p = clamp01((t - sh.t0) / S.jumpDur), e = easeIO((p - 0.2) / 0.6), [sx, sz] = slotPos(sh.slot); return { x: qx + (sx - qx) * e, y: Math.min(1, Math.sin(Math.PI * p) * 1.6) * S.jumpHeight, z: qz + (sz - qz) * e, s: 1 }; } // 先起跳（越过相邻队首炮台），再平移，最后落入槽位
   const [sx, sz] = slotPos(sh.slot);
   if (sh.state === 'slot') { const rp = (t - sh.recoilT) / 90, rc = rp >= 0 && rp < 1 ? Math.sin(Math.PI * rp) * S.recoil : 0, land = (t - sh.t0) / 160, sq = land < 1 ? 1 - 0.12 * Math.sin(Math.PI * land) : 1; return { x: sx, y: 0, z: sz + rc, s: 1, sy: sq }; }
   if (sh.state === 'leave') { const p = clamp01((t - sh.t0) / S.leaveDur); return { x: sx, y: Math.sin(Math.PI * Math.min(1, p * 1.6)) * 0.8, z: sz, s: Math.max(0.001, 1 - easeIO(p)) }; }
@@ -94,7 +97,7 @@ function tapShooter(sh) {
   sh.pressT = now();
   const si = G.slots.indexOf(null); if (si < 0) { sfx.play('error', S); return false; } // 槽位已满
   G.slots[si] = sh; sh.slot = si; sh.state = 'jump'; sh.t0 = now(); G.taps = (G.taps || 0) + 1; sfx.play('pop', S);
-  const q = G.queues[sh.col]; q.shift(); q.forEach((o, r) => { o.rowFrom = o.state === 'queue' ? currentRow(o) : r + 1; o.row = r; o.rowT = now(); });
+  const q = G.queues[sh.col]; q.shift(); q.forEach((o, r) => { o.rowFrom = o.state === 'queue' ? currentRow(o) : r + 1; o.row = r; o.rowT = now() + S.jumpDur * 0.25; }); // 后排等队首起跳后再前移（不撞上）
   return true;
 }
 function currentRow(o) { const p = easeIO((now() - o.rowT) / S.advanceDur); return o.rowFrom + (o.row - o.rowFrom) * p; }
@@ -107,7 +110,9 @@ function hitPoint(n, from) {
   if (!best) best = [0, 1, 0]; const off = Wd.vs / 2 + S.ballR + 0.02;
   return { p: [c[0] + best[0] * off, c[1] + best[1] * off, c[2] + best[2] * off], nrm: best };
 }
-function ballPath(p0, p1) { const mid = [(p0[0] + p1[0]) / 2, Math.max(p0[1], p1[1]) + S.ballArc, (p0[2] + p1[2]) / 2]; return u => { const a = (1 - u) * (1 - u), b = 2 * (1 - u) * u, c = u * u; return [a * p0[0] + b * mid[0] + c * p1[0], a * p0[1] + b * mid[1] + c * p1[1], a * p0[2] + b * mid[2] + c * p1[2]]; }; }
+function ballPath(p0, p1, arc = S.ballArc, ctrl = null) {
+  if (ctrl && ctrl.length === 2) { const [c1, c2] = ctrl; return u => { const v = 1 - u, a = v * v * v, b = 3 * v * v * u, c = 3 * v * u * u, d = u * u * u; return [0, 1, 2].map(k => a * p0[k] + b * c1[k] + c * c2[k] + d * p1[k]); }; } // 三次：先升高越过方块，再沿外露面法线方向落入
+  const mid = ctrl || [(p0[0] + p1[0]) / 2, Math.max(p0[1], p1[1]) + arc, (p0[2] + p1[2]) / 2]; return u => { const a = (1 - u) * (1 - u), b = 2 * (1 - u) * u, c = u * u; return [a * p0[0] + b * mid[0] + c * p1[0], a * p0[1] + b * mid[1] + c * p1[1], a * p0[2] + b * mid[2] + c * p1[2]]; }; }
 function sphereHitsVox(p, r, skip) { // 球与已占方块（圆角忽略，按格子盒）是否相交
   const vs = Wd.vs, ci = Math.floor(p[0] / vs + L.W / 2), cj = Math.floor(p[1] / vs), ck = Math.floor(-p[2] / vs);
   for (let a = ci - 1; a <= ci + 1; a++) for (let b = cj - 1; b <= cj + 1; b++) for (let c = ck - 1; c <= ck + 1; c++) {
@@ -121,8 +126,12 @@ function pickTargetLOS(sh, muz) {
   const c = sh.color, cand = [];
   for (const m of st.exp[c]) { if (st.claimed[m]) continue; const p = Wd.vox(m), d = (p[0] - muz[0]) ** 2 + (p[1] - muz[1]) ** 2 * 0.6 + (p[2] - muz[2]) ** 2; cand.push([d, m]); }
   if (!cand.length) return null; cand.sort((a, b) => a[0] - b[0]);
-  for (let q = 0; q < Math.min(cand.length, 24); q++) { const m = cand[q][1], hp = hitPoint(m, muz), path = ballPath(muz, hp.p); let ok = true; for (let s = 1; s < 12 && ok; s++) if (sphereHitsVox(path(s / 12), S.ballR * 0.98, m)) ok = false; if (ok) return { m, hp, path }; }
-  const m = cand[0][1], hp = hitPoint(m, muz); return { m, hp, path: ballPath(muz, hp.p), blocked: true };
+  const clear = (path, m) => { const p0 = path(0), p1 = path(0.5), p2 = path(1), len = Math.hypot(p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]) + Math.hypot(p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]), n = Math.max(12, Math.ceil(len / (S.ballR * 0.5))); for (let s = 1; s <= n; s++) if (sphereHitsVox(path(s / n), S.ballR + 0.005, -1)) return false; return true; }; // 弹道逐段（≤ 半个球半径）检查不穿方块
+  const top = L.H * Wd.vs;
+  for (const arc of [S.ballArc, S.ballArc * 2 + 2, S.ballArc * 4 + 6, -1, -2, -3, -4]) for (let q = 0; q < Math.min(cand.length, 80); q++) { const m = cand[q][1], hp = hitPoint(m, muz), n = hp.nrm;
+    const LOB = { '-1': [3, 3], '-2': [10, 1.5], '-3': [10, 5], '-4': [18, 3] }[arc] || [0, 0], hh = top + LOB[0], dd = Wd.vs * LOB[1], ctrl = arc >= 0 ? null : [[muz[0], hh, muz[2]], [hp.p[0] + n[0] * dd, hh, hp.p[2] + n[2] * dd]]; // 沿外露面法线方向从上方落入（侧面 / 坑里的方块）
+    const path = ballPath(muz, hp.p, arc, ctrl); if (clear(path, m)) return { m, hp, path }; } // 先平射，挡住时抬高抛物线越过
+  const m = cand[0][1], hp = hitPoint(m, muz); if (window.__dbgBlocked) (window.__blk = window.__blk || []).push({ why: (() => { const hh = top + 10, dd = Wd.vs * 1.5, n2 = hp.nrm, path = ballPath(muz, hp.p, -2, [[muz[0], hh, muz[2]], [hp.p[0] + n2[0] * dd, hh, hp.p[2] + n2[2] * dd]]); for (let q = 1; q <= 200; q++) { const h = sphereHitsVox(path(q / 200), S.ballR + 0.005, -1); if (h) return [q / 200, h.n, coords(L, h.n), path(q / 200).map(x => +x.toFixed(2))]; } return null; })(), n: cand.length, m, c: coords(L, m), nrm: hp.nrm, muz, nb: [[0,1,0],[0,0,-1],[-1,0,0],[1,0,0],[0,0,1]].map(f => { const [i, j, k] = coords(L, m), a = i + f[0], b = j + f[1], c = k + f[2]; return a < 0 || b < 0 || c < 0 || a >= L.W || b >= L.H || c >= L.D ? 'out' : st.vox[idx(L, a, b, c)]; }) }); return { m, hp, path: ballPath(muz, hp.p, S.ballArc * 8 + 12), blocked: true }; // 全部被挡：先等待（其它炮台会打开通路），超时才高抛
 }
 function playShot(t) { shotSfxT = shotSfxT.filter(x => t - x < 1000); if (shotSfxT.length < S.sfxShootMax) { shotSfxT.push(t); sfx.play('shoot', S); } }
 function step(t) {
@@ -134,10 +143,11 @@ function step(t) {
       let guard = 0;
       while (sh.left > 0 && t >= sh.fireNext && guard++ < 8) {
         const w = shooterWorld(sh, t), muz = Wd.muzzleOf(w.x, w.z), tg = pickTargetLOS(sh, muz);
-        if (!tg) { sh.fireNext = t + 50; break; } // 没有可打目标 → 等待（参考：黄色等待到黑线打开）
+        if (!tg) { sh.fireNext = t + 50; break; }
+        if (tg.blocked && (sh.blockWait = (sh.blockWait || 0) + 1) < 40) { sh.fireNext = t + 50; break; } sh.blockWait = 0; // 没有可打目标 → 等待（参考：黄色等待到黑线打开）
         st.claimed[tg.m] = 1; sh.left--; sh.inFlight++; sh.recoilT = sh.fireNext; G.shots++;
         const len = Math.hypot(tg.hp.p[0] - muz[0], tg.hp.p[1] - muz[1], tg.hp.p[2] - muz[2]) + S.ballArc;
-        G.balls.push({ id: ++ballSeq, ph: 'fly', t0: sh.fireNext, dur: Math.max(60, len / S.ballSpeed * 1000), path: tg.path, m: tg.m, nrm: tg.hp.nrm, sh, pos: muz.slice(), blocked: !!tg.blocked });
+        window.__blockedShots = (window.__blockedShots || 0) + (tg.blocked ? 1 : 0); G.balls.push({ id: ++ballSeq, ph: 'fly', t0: sh.fireNext, dur: Math.max(60, len / S.ballSpeed * 1000), path: tg.path, m: tg.m, nrm: tg.hp.nrm, sh, pos: muz.slice(), blocked: !!tg.blocked });
         playShot(t); sh.fireNext += 1000 / S.fireRate;
       }
       if ((sh.left <= 0 || st.left[sh.color] === 0) && sh.inFlight <= 0 && t - sh.recoilT > 120) { sh.state = 'leave'; sh.t0 = t; sfx.play('whoosh', S, { dur: S.leaveDur / 1000 }); }
@@ -165,7 +175,9 @@ function step(t) {
           if (vn < 0) for (let a = 0; a < 3; a++) b.vel[a] -= 1.5 * vn * nn[a]; continue; }
         const onBase = np[0] > Wd.base.x0 && np[0] < Wd.base.x1 && np[2] > Wd.base.z0 && np[2] < Wd.base.z1, floor = (onBase ? Wd.base.y1 : 0) + r;
         if (np[1] < floor && b.vel[1] < 0) { np[1] = floor; b.vel[1] *= -0.45; b.vel[0] *= 0.8; b.vel[2] *= 0.8; }
-        for (const sh of G.shooters) { if (sh.state !== 'slot' && sh.state !== 'queue' && sh.state !== 'jump') continue; const w = shooterWorld(sh, t); if (!w) continue; const hx = SH.w / 2 + r, hz = SH.d / 2 + r, hy = SH.h + r; if (Math.abs(np[0] - w.x) < hx && Math.abs(np[2] - w.z) < hz && np[1] - w.y < hy && np[1] > w.y) { np[1] = w.y + hy; if (b.vel[1] < 0) b.vel[1] *= -0.4; } }
+        for (const sh of G.shooters) { if (sh.state === 'gone') continue; const w = shooterWorld(sh, t); if (!w) continue; const B = shooterBox(), ws = w.s || 1, ex = Math.max(-B.x0, B.x1) * ws + r, ez = Math.max(-B.z0, B.z1) * ws + r, hy = B.y1 * ws * (w.sy ?? 1) + r; const by0 = w.y + B.y0 * ws - r; if (Math.abs(np[0] - w.x) < ex && Math.abs(np[2] - w.z) < ez && np[1] < w.y + hy && np[1] > by0) { // 球在炮台包围盒内：沿最浅方向推出
+            const pu = w.y + hy - np[1], pd = np[1] - by0, px = ex - Math.abs(np[0] - w.x), pz = ez - Math.abs(np[2] - w.z), mn = Math.min(pu, pd, px, pz);
+            if (mn === pu) { np[1] = w.y + hy; if (b.vel[1] < 0) b.vel[1] *= -0.4; } else if (mn === px) { const sg = Math.sign(np[0] - w.x) || 1; np[0] = w.x + sg * ex; b.vel[0] = sg * Math.abs(b.vel[0]) * 0.5; } else if (mn === pz) { const sg = Math.sign(np[2] - w.z) || 1; np[2] = w.z + sg * ez; b.vel[2] = sg * Math.abs(b.vel[2]) * 0.5; } else { np[1] = by0; if (b.vel[1] > 0) b.vel[1] = 0; } } }
         b.pos = np;
       }
       if (t - b.tb > S.ballLife) b.ph = 'gone';
@@ -430,6 +442,6 @@ document.getElementById('btnExport').onclick = () => { const a = document.create
 document.getElementById('btnImport').onclick = () => document.getElementById('importFile').click();
 document.getElementById('importFile').onchange = e => { const f = e.target.files[0]; if (!f) return; f.text().then(t => { const j = JSON.parse(t); S = migrate(j); saveSettings(S); buildPanel(); loadHand(); newGame(); toast('已导入设置'); }).catch(() => toast('导入失败')); };
 document.getElementById('btnReset').onclick = () => { if (!confirm('恢复全部默认设置？')) return; S = { ...DEFS }; saveSettings(S); buildPanel(); loadHand(); newGame(); };
-window.__game = { renderAt: t => { window.__vclock = t; step(t); updPress(t); draw(t); if (aeActive()) aeRec.sample(t); }, get items() { return draw.items || []; }, get world() { return Wd; }, get G() { return G; }, create3D, autoSolve, newGame, tapShooter, tapAt, hitShooter, shooterScreen, scene: () => scene(now()), voxGroups: () => voxGroups(now()), doExportAE, doExport3D, aeRec, aeStart: () => recStart(), aeStop: () => aeStop(), aeActive: () => aeActive(), get aeLastRec() { return aeLastRec; }, get mediaRec() { return rec; }, startRec, stopRec, get S() { return S; }, get r3d() { return r3d; }, set(k, v) { S[k] = v; applyChange(k); buildPanel(); }, get st() { return st; }, get L() { return L; }, get hand() { return hand; }, get autoRunning() { return autoRunning; }, nextAuto, loadLevel: Lx => { autoToken++; autoRunning = false; startLevel(Lx); }, migrate, APP_ID, sphereHitsVox: (p, r, s) => sphereHitsVox(p, r, s) };
+window.__game = { renderAt: t => { window.__vclock = t; step(t); updPress(t); draw(t); if (aeActive()) aeRec.sample(t); }, get items() { return draw.items || []; }, get world() { return Wd; }, get G() { return G; }, create3D, autoSolve, newGame, tapShooter, tapAt, hitShooter, shooterScreen, scene: () => scene(now()), voxGroups: () => voxGroups(now()), doExportAE, doExport3D, aeRec, aeStart: () => recStart(), aeStop: () => aeStop(), aeActive: () => aeActive(), get aeLastRec() { return aeLastRec; }, get mediaRec() { return rec; }, startRec, stopRec, get S() { return S; }, get r3d() { return r3d; }, set(k, v) { S[k] = v; applyChange(k); buildPanel(); }, get st() { return st; }, get L() { return L; }, get hand() { return hand; }, view: () => view(), shooterWorld: (sh, t) => shooterWorld(sh, t), shooterBox: () => shooterBox(), voxGeoSize: () => { const g = geos(S).vox; g.computeBoundingBox(); const b = g.boundingBox; return [b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z]; }, shooterParts: () => { const m = makeShooter(S, 'green', Wd); return m.children.map(c => c.name); }, get autoRunning() { return autoRunning; }, nextAuto, loadLevel: Lx => { autoToken++; autoRunning = false; startLevel(Lx); }, migrate, APP_ID, sphereHitsVox: (p, r, s) => sphereHitsVox(p, r, s) };
 buildPanel(); loadHand(); newGame();
 requestAnimationFrame(loop);

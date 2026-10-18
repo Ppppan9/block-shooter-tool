@@ -32,7 +32,7 @@ export function makeShooter(S, color, Wd) {
   for (const sx of [-1, 1]) { const t = new THREE.Mesh(trackG, mat(S, dark)); t.name = sx < 0 ? 'track_L' : 'track_R'; t.position.set(sx * w * 0.38, h * 0.23, 0); G.add(withOutline(t, S)); }
   const hull = new THREE.Mesh(rb(w * 0.66, h * 0.5, d * 0.92, 0.22), mat(S, hex)); hull.name = 'hull'; hull.position.set(0, h * 0.42, 0.0); G.add(withOutline(hull, S));
   const tur = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 14, 0, Math.PI * 2, 0, Math.PI / 2), mat(S, hex)); tur.name = 'turret'; tur.scale.set(w * 0.36, h * 0.5, d * 0.4); tur.position.set(0, h * 0.62, 0.08); G.add(withOutline(tur, S));
-  const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.3, d * 0.42, 16), mat(S, hex)); bar.name = 'barrel'; bar.rotation.x = -Math.PI / 2 + 0.6; bar.position.set(0, h * 0.86, -d * 0.36); G.add(withOutline(bar, S));
+  const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.3, d * 0.42, 16), mat(S, hex)); bar.name = 'barrel'; bar.rotation.x = -Math.PI / 2 + 0.6; bar.position.set(0, h * 0.86, -d * 0.25); G.add(withOutline(bar, S));
   const lab = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 0.95), new THREE.MeshBasicMaterial({ map: numberTexture(200), transparent: true, depthWrite: false, depthTest: false })); lab.name = 'label'; lab.renderOrder = 5; lab.position.set(0, h * 1.18, 0.1); G.add(lab);
   G.userData.label = lab; G.userData.color = color;
   return G;

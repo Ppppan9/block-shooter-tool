@@ -55,7 +55,7 @@ await set('hideCursor', true); await frames(); ok(await cur() === 'none', 'hideC
 if (kind === 'mahjong') { await set('manualHand', false); await frames(); ok(await cur() === 'pointer', 'manualHand=false: pointer'); await set('manualHand', true); await frames(); }
 else { await set('handShow', false); await frames(); ok(await cur() === 'pointer', 'handShow=false: pointer'); await set('handShow', true); await frames(); }
 const hi = await get('handImage'); await set('handImage', ''); await p.waitForTimeout(400); await frames();
-if (kind === 'coffee') ok(true, 'coffee: empty handImage = built-in default hand (cursor ' + await cur() + ')');
+if (kind === 'coffee' || tool === 'block-shooter-tool') ok(await cur() === 'none' || kind === 'coffee', tool + ': empty handImage = built-in default (mahjong) hand, cursor stays hidden (' + await cur() + ')');
 else ok(await cur() === 'pointer', 'no hand image: pointer (' + await cur() + ')');
 await set('handImage', hi); await p.waitForTimeout(400); await p.mouse.move(m[0] + 3, m[1]); await frames();
 ok(await cur() === 'none', 'hand image restored: none');

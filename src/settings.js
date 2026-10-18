@@ -75,7 +75,7 @@ export const GROUPS = [
     ['gravity', '重力(格/秒²)', 'range', 32, 0, 120, 1],
     ['ballLife', '弹开后存在时间(ms)', 'range', 1100, 100, 4000, 50],
     ['jumpDur', '炮台跳入槽位(ms)', 'range', 260, 50, 1500, 10],
-    ['jumpHeight', '跳跃高度(格)', 'range', 1.6, 0, 6, 0.1],
+    ['jumpHeight', '跳跃高度(格，≥2.1 越过相邻炮台)', 'range', 2.3, 0, 6, 0.1],
     ['advanceDur', '队列前移(ms)', 'range', 200, 30, 1500, 10],
     ['leaveDur', '弹药打光离场(ms)', 'range', 380, 50, 2000, 10],
     ['popDur', '方块消除缩小(ms)', 'range', 110, 0, 1000, 10],
