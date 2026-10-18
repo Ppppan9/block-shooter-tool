@@ -1,10 +1,10 @@
-/*  build_ae_project.jsx — 咖啡分拣 · After Effects 工程构建脚本
+/*  build_ae_project.jsx — 方块射击 · After Effects 工程构建脚本
  *  用法：After Effects > 文件 > 脚本 > 运行脚本文件… 选择本文件（与 timeline.json、assets/、audio/ 放在同一文件夹）。
  *  语法：ExtendScript（ES3），不依赖 JSON 内置对象；适用于 AE CC 2018 及以上。
- *  由“咖啡分拣核玩工具”自动生成，请勿手改 timeline.json 的结构。
+ *  由“方块射击核玩工具”自动生成，请勿手改 timeline.json 的结构。
  */
 (function () {
-    var SCRIPT_NAME = "咖啡分拣 AE 工程构建";
+    var SCRIPT_NAME = "方块射击 AE 工程构建";
 
     // ---------- 小工具 ----------
     function isArray(v) { return Object.prototype.toString.call(v) === "[object Array]"; }
@@ -184,6 +184,19 @@
             layer = comp.layers.add(comps[src.comp]);
         } else if (src.solid) {
             layer = comp.layers.addSolid(src.solid, L.name, src.w || comp.width, src.h || comp.height, 1, comp.duration);
+        } else if (src.text) {
+            // 文本图层（炮台数字）：源文字定格关键帧
+            layer = comp.layers.addText(src.text.v[0]);
+            var stp = layer.property("ADBE Text Properties").property("ADBE Text Document"), q, doc;
+            for (q = 0; q < src.text.v.length; q += 1) {
+                doc = stp.value; doc.text = src.text.v[q];
+                try { doc.font = src.text.font; } catch (eF) {}
+                doc.fontSize = src.text.size; doc.applyFill = true; doc.fillColor = src.text.fill;
+                doc.applyStroke = true; doc.strokeColor = src.text.stroke; doc.strokeWidth = src.text.strokeWidth; doc.strokeOverFill = false;
+                doc.justification = ParagraphJustification.CENTER_JUSTIFY;
+                if (src.text.t.length > 1) { stp.setValueAtTime(src.text.t[q], doc); } else { stp.setValue(doc); }
+            }
+            if (src.text.t.length > 1) { stats.keys += src.text.t.length; }
         }
         if (!layer) { return null; }
         layer.name = L.name;
@@ -232,7 +245,7 @@
     // ---------- 保存 .aep ----------
     var savedTo = "";
     if (META.saveAep) {
-        var outFile = new File(baseDir.fsName + "/" + (META.aepName || "coffee_export.aep"));
+        var outFile = new File(baseDir.fsName + "/" + (META.aepName || "block-shooter-tool_export.aep"));
         if (confirm("工程已生成。是否另存为：\n" + outFile.fsName + " ？", false, SCRIPT_NAME)) {
             try { proj.save(outFile); savedTo = outFile.fsName; } catch (eS) { warnings.push("保存失败：" + eS.toString()); }
         }
@@ -243,5 +256,5 @@
     if (missing.length) { msg += "\n缺少素材 " + missing.length + " 个（例如 " + missing[0] + "）"; }
     if (warnings.length) { msg += "\n警告 " + warnings.length + " 条：\n" + warnings.slice(0, 8).join("\n"); }
     alert(msg, SCRIPT_NAME);
-    $.global.__COFFEE_BUILD_STATS = stats; // 便于自动化测试读取
+    $.global.__BLOCK_SHOOTER_BUILD_STATS = stats; // 便于自动化测试读取
 }());

@@ -189,12 +189,15 @@ function scene(t) {
   const at3 = (id, asset, w, ws, z, extra = {}) => { const p = Wd.proj(w[0], w[1], w[2]), a = Wd.proj(w[0] - 0.5, w[1], w[2]), b = Wd.proj(w[0] + 0.5, w[1], w[2]), k = Math.hypot(b[0] - a[0], b[1] - a[1]) / K0; return add(id, asset, p[0], p[1], { sx: ws * k * (extra.wsx ?? 1), sy: ws * k * (extra.wsy ?? 1), z: z ?? (10 + (1 - p[2]) * 1e3), extra: { w: w.slice(), ws, ...extra } }); };
   add('background', 'background', 0, 0, { z: 0 });
   for (let i = 0; i < SLOTS; i++) { const [x, zz] = Wd.slots[i]; at3('slot_' + (i + 1), 'slot', [x, 0.04, zz], 1, 2); }
+  const RX = 0.9655, RZ = -0.2599; // 相机右向量（水平）
+  const labPx = (lp, w, ws) => { const q = Wd.proj(w.x + RX, w.y + SH.h * 1.18 * ws * (w.sy ?? 1), w.z + 0.1 + RZ); const ppu = Math.hypot(q[0] - lp[0], q[1] - lp[1]); return 0.95 * 46 / 64 * ppu * ws / 24; };
   for (const sh of G.shooters) {
     if (sh.state === 'gone') continue; const w = shooterWorld(sh, t); if (!w) continue;
     const pp = (t - sh.pressT) / 160, pr = pp >= 0 && pp < 1 ? 1 - S.pressScale * Math.sin(Math.PI * pp) : 1;
     if (sh.state === 'queue' && sh.row > 16) continue; // 画面外
     const front = sh.state !== 'queue' || G.queues[sh.col][0] === sh;
-    at3('shooter_' + String(sh.id + 1).padStart(3, '0'), 'shooter_' + L.palette[sh.color], [w.x, w.y, w.z], w.s * pr, undefined, { num: sh.left, numOp: front ? 1 : S.numBackOpacity, wsy: w.sy ?? 1 });
+    const ws = w.s * pr, lp = Wd.proj(w.x, w.y + SH.h * 1.18 * ws * (w.sy ?? 1), w.z + 0.1);
+    at3('shooter_' + String(sh.id + 1).padStart(3, '0'), 'shooter_' + L.palette[sh.color], [w.x, w.y, w.z], ws, undefined, { num: sh.left, numOp: front ? 1 : S.numBackOpacity, wsy: w.sy ?? 1, lx: lp[0], ly: lp[1], lsx: labPx(lp, w, ws) });
   }
   for (const b of G.balls) { const life = b.ph === 'bounce' ? clamp01((S.ballLife - (t - b.tb)) / 200) : 1; at3('ball_' + b.id, 'ball', b.pos, life); }
   for (const d of G.debris) { const p = clamp01((t - d.t0) / 500); at3('debris_' + d.id, 'debris_' + d.color, d.p, d.s * (1 - p), undefined, { rx: d.rot, ry: d.rot * 0.7 }); }
@@ -344,7 +347,7 @@ function stopRec() { if (rec && rec.state !== 'inactive') rec.stop(); }
 function updRecBtn() { const b = document.getElementById('btnRec'); b.textContent = rec ? '■ 停止录制' : '⏺ 开始录制'; b.classList.toggle('on', !!rec); }
 
 // ---------- AE / 3D 导出 ----------
-const aeRec = createAERecorder({ sfx, env: () => ({ L, st, S, A, Wd, G, items: draw.items || [], canvas: cv, handImg: hand.img, r3d }) });
+const aeRec = createAERecorder({ sfx, now, sprites: r => buildSprites(r.S, r.L, r.Wd), env: () => ({ L, st, S, A, Wd, G, items: draw.items || [], voxBase: voxGroups.c && voxGroups.c.base, canvas: cv, handImg: hand.img, r3d }) });
 let recClosed = false, aeLastRec = null, aeByRec = false;
 function recStart() { aeRec.start(); recClosed = false; updateAEButtons(); toast('开始记录 AE 时间轴'); }
 function aeActive() { return !!aeRec.rec && !recClosed; }

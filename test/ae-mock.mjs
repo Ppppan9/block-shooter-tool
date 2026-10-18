@@ -20,10 +20,12 @@ export function runMock(dir) {
     read() { if (this._mode !== 'r') throw new Error('file not open'); return fs.readFileSync(this.fsName, this.encoding === 'UTF-8' ? 'utf8' : 'latin1'); }
     close() { this._mode = null; }
   }
+  class TextDocument { constructor(t) { this.text = t; } }
   class Prop {
     constructor(name, dims, owner) { this.name = name; this.dims = dims; this.keys = []; this.value = null; this.owner = owner; this.dimensionsSeparated = false; }
     get numKeys() { return this.keys.length; }
     check(v) {
+      if (this.dims === -1) { if (!(v instanceof TextDocument) || typeof v.text !== 'string') fail(`${this.owner.name}: 源文字需要 TextDocument`); return; }
       if (this.dims === 1) { if (typeof v !== 'number' || !isFinite(v)) fail(`${this.owner.name} ${this.name}: 非数值 ${v}`); if (this.name === 'ADBE Opacity' && (v < -1e-6 || v > 100.0001)) fail(`${this.owner.name} 不透明度越界 ${v}`); }
       else if (!Array.isArray(v) || v.length < 2 || v.length > 3 || [].slice.call(v).some(x => typeof x !== 'number' || !isFinite(x))) fail(`${this.owner.name} ${this.name}: 维度/数值错误 ${JSON.stringify(v)}`);
     }
@@ -52,12 +54,13 @@ export function runMock(dir) {
     property(n) {
       if (n === 'ADBE Transform Group') { const tg = this._tg, self = this; return { property(m) { if ((m === 'ADBE Position_0' || m === 'ADBE Position_1') && !self._posSep) fail(`${self.name}: 未拆分维度就访问 ${m}`); if (!tg[m]) fail('未知属性 ' + m); return tg[m]; } }; }
       if (n === 'ADBE Marker') return this._marker;
+      if (n === 'ADBE Text Properties') { if (this.kind !== 'text') fail(`${this.name}: 非文本图层访问文字属性`); const tp = this._text; return { property(m) { if (m !== 'ADBE Text Document') fail('未知文字属性 ' + m); return tp; } }; }
       if (n === 'ADBE Audio Group') { if (this.kind !== 'audio') throw new Error('no audio'); const a = this._audio; return { property(m) { return a[m]; } }; }
       fail('未知属性组 ' + n);
     }
   }
   class Comp {
-    constructor(name, w, h, par, dur, fps) { if (!(w >= 4 && h >= 4 && w <= 30000 && h <= 30000)) fail('合成尺寸非法'); if (!(dur > 0 && fps > 0)) fail('时长/帧率非法'); Object.assign(this, { name, width: w, height: h, pixelAspect: par, duration: dur, frameRate: fps, typeName: 'Composition' }); this.layerList = []; const self = this; this.markerProperty = new Prop('ADBE Marker', 0, { name: 'comp ' + name, comp: this }); this.layers = { add(item) { if (!item || !item.typeName) fail('layers.add 参数不是素材/合成'); if (item === self) fail('合成不能包含自身'); const L = new Layer(self, item, item.isAudio ? 'audio' : (item.typeName === 'Composition' ? 'comp' : 'image')); self.layerList.unshift(L); return L; }, addSolid(color, name, w, h, par, dur) { if (!Array.isArray(color) || color.length !== 3) fail('solid 颜色错误'); const L = new Layer(self, { typeName: 'Solid', width: w, height: h }, 'solid'); L.name = name; self.layerList.unshift(L); return L; } }; log.comps.push(this); }
+    constructor(name, w, h, par, dur, fps) { if (!(w >= 4 && h >= 4 && w <= 30000 && h <= 30000)) fail('合成尺寸非法'); if (!(dur > 0 && fps > 0)) fail('时长/帧率非法'); Object.assign(this, { name, width: w, height: h, pixelAspect: par, duration: dur, frameRate: fps, typeName: 'Composition' }); this.layerList = []; const self = this; this.markerProperty = new Prop('ADBE Marker', 0, { name: 'comp ' + name, comp: this }); this.layers = { add(item) { if (!item || !item.typeName) fail('layers.add 参数不是素材/合成'); if (item === self) fail('合成不能包含自身'); const L = new Layer(self, item, item.isAudio ? 'audio' : (item.typeName === 'Composition' ? 'comp' : 'image')); self.layerList.unshift(L); return L; }, addText(str) { if (typeof str !== 'string') fail('addText 需要字符串'); const L = new Layer(self, { typeName: 'Text' }, 'text'); L._text = new Prop('ADBE Text Document', -1, L); L._text.value = new TextDocument(str); self.layerList.unshift(L); return L; }, addSolid(color, name, w, h, par, dur) { if (!Array.isArray(color) || color.length !== 3) fail('solid 颜色错误'); const L = new Layer(self, { typeName: 'Solid', width: w, height: h }, 'solid'); L.name = name; self.layerList.unshift(L); return L; } }; log.comps.push(this); }
     openInViewer() { this._opened = true; }
   }
   class Folder { constructor(name) { this.name = name; this.typeName = 'Folder'; } }
@@ -71,7 +74,7 @@ export function runMock(dir) {
   const sandbox = {
     app: { project, newProject() { log.newProject = true; return project; }, beginUndoGroup() { log.undo = (log.undo || 0) + 1; }, endUndoGroup() { log.undo--; } },
     $: { fileName: path.join(dir, 'build_ae_project.jsx'), global: {} },
-    File: MFile, Folder: MFile, ImportOptions, ImportAsType: { FOOTAGE: 1, COMP: 2, PROJECT: 3 }, MarkerValue,
+    File: MFile, Folder: MFile, ImportOptions, ImportAsType: { FOOTAGE: 1, COMP: 2, PROJECT: 3 }, MarkerValue, ParagraphJustification: { CENTER_JUSTIFY: 7415 },
     KeyframeInterpolationType: KIT, BlendingMode: { ADD: 'ADD', NORMAL: 'NORMAL' },
     alert(m) { log.alerts.push(String(m)); }, confirm() { return true; },
   };
@@ -80,7 +83,7 @@ export function runMock(dir) {
   vm.runInContext('delete this.JSON; Array.prototype.forEach=Array.prototype.map=Array.prototype.filter=Array.prototype.indexOf=Array.prototype.reduce=Array.prototype.some=Array.prototype.every=undefined; Array.isArray=undefined; String.prototype.trim=undefined; Object.keys=undefined; Object.create=undefined; Function.prototype.bind=undefined; Date.now=undefined;', sandbox);
   vm.runInContext(jsx, sandbox, { filename: 'build_ae_project.jsx' });
   // ---- 对比 ----
-  const st = sandbox.$.global.__COFFEE_BUILD_STATS;
+  const st = sandbox.$.global.__BLOCK_SHOOTER_BUILD_STATS;
   const exp = TL.meta.stats;
   if (!st) fail('脚本没有跑完（没有统计）');
   const byName = {}; for (const c of log.comps) byName[c.name] = c;
@@ -112,7 +115,7 @@ export function runMock(dir) {
   if (!main._opened) fail('主合成未打开');
   if (TL.meta.saveAep && !log.saved) fail('未保存 .aep');
   // v1.2.1：同一托盘换绘制层（拖动 / 升起打包）会拆成「托盘_01 #1/#2…」多段；按托盘汇总，最后一段结束 = 已消除
-  const tl = log.comps.flatMap(c => c.layerList).filter(l => /^托盘_\d+( #\d+)?$/.test(l.name)), byTile = new Map();
+  const tl = log.comps.flatMap(c => c.layerList).filter(l => /^方块_/.test(l.name)), byTile = new Map();
   for (const l of tl) { const k = l.name.split(' ')[0], o = byTile.get(k); if (!o || l.outPoint > o.outPoint) byTile.set(k, l); }
   const tiles = [...byTile.values()], ended = tiles.filter(l => l.outPoint < l.comp.duration - 1e-6).length;
   return { errs, stats: st, expected: exp, imports: log.imports, folders: log.folders, comps: log.comps.length, saved: log.saved && path.basename(log.saved), tileLayers: tiles.length, tilesEnded: ended, compMarkers: main.markerProperty.keys.length, alert: log.alerts[log.alerts.length - 1] };
@@ -120,7 +123,7 @@ export function runMock(dir) {
 if (process.argv[2]) {
   const zips = process.argv.slice(2), results = [];
   for (const z of zips) {
-    const dir = '/tmp/coffee_aemock_' + path.basename(z, '.zip'); fs.rmSync(dir, { recursive: true, force: true }); fs.mkdirSync(dir, { recursive: true });
+    const dir = '/tmp/bs_aemock_' + path.basename(z, '.zip'); fs.rmSync(dir, { recursive: true, force: true }); fs.mkdirSync(dir, { recursive: true });
     execSync(`python3 -c "import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "${z}" "${dir}"`);
     const r = runMock(dir); results.push(r);
     console.log(path.basename(z), JSON.stringify({ ok: r.errs.length === 0, errs: r.errs.slice(0, 10), nErr: r.errs.length, layers: r.stats && r.stats.layers, keys: r.stats && r.stats.keys, markers: r.stats && r.stats.markers, expected: { layers: r.expected.layers, keys: r.expected.keys }, imports: r.imports, folders: r.folders, comps: r.comps, tileLayers: r.tileLayers, tilesEnded: r.tilesEnded, compMarkers: r.compMarkers, saved: r.saved }));

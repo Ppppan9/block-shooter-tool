@@ -3,9 +3,9 @@
 import { chromium } from 'playwright-core';
 import fs from 'fs'; import path from 'path'; import { execSync } from 'child_process';
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const zip = process.argv[2] || '/workspace/coffee_ae_sample.zip';
-const snapDir = process.argv[3] || '/tmp/coffee_ae/snaps';
-const dir = '/tmp/coffee_aecomp'; fs.rmSync(dir, { recursive: true, force: true }); fs.mkdirSync(dir + '/check', { recursive: true });
+const zip = process.argv[2] || '/workspace/block_shooter_ae_sample.zip';
+const snapDir = process.argv[3] || '/tmp/bs_ae/snaps';
+const dir = '/tmp/bs_aecomp'; fs.rmSync(dir, { recursive: true, force: true }); fs.mkdirSync(dir + '/check', { recursive: true });
 execSync(`python3 -c "import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "${zip}" "${dir}"`);
 const snaps = fs.readdirSync(snapDir).filter(f => f.endsWith('.png')).sort();
 for (const f of snaps) fs.copyFileSync(path.join(snapDir, f), path.join(dir, 'check', f));
@@ -33,6 +33,7 @@ window.run = async (snapList) => {
       if (src.asset) { const im = imgs[src.asset]; if (!im) continue; w = im.width; h = im.height; draw = () => g.drawImage(im, 0, 0); }
       else if (src.comp) { const cc = comps[src.comp]; w = cc.w; h = cc.h; draw = () => { const o = document.createElement('canvas'); o.width = w; o.height = h; render(cc, t - (L.start || 0), o.getContext('2d')); g.drawImage(o, 0, 0); }; }
       else if (src.solid) { w = src.w; h = src.h; draw = () => { g.fillStyle = 'rgb(' + src.solid.map(x => Math.round(x * 255)).join(',') + ')'; g.fillRect(0, 0, w, h); }; }
+      else if (src.text) { w = 0; h = 0; const T = src.text; let q = 0; while (q < T.t.length - 1 && T.t[q + 1] <= t + 1e-6) q++; const str = T.v[q]; draw = () => { g.font = 'bold ' + T.size + 'px "Arial Black",sans-serif'; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.lineJoin = 'round'; g.lineWidth = T.strokeWidth; g.strokeStyle = 'rgb(' + T.stroke.map(x => x * 255).join(',') + ')'; g.strokeText(str, 0, 0); g.fillStyle = '#fff'; g.fillText(str, 0, 0); }; }
       else continue;
       const tr = L.tr || {};
       const an = val(tr.anchor, t, [w / 2, h / 2]), pos = val(tr.position, t, [c.w / 2, c.h / 2]), sc = val(tr.scale, t, [100, 100]), rot = val(tr.rotation, t, 0), op = val(tr.opacity, t, 100);
@@ -83,14 +84,14 @@ const worst = res.slice().sort((a, b) => a.psnr - b.psnr).slice(0, 5); console.l
 if (process.env.DUMP) for (const r of res.filter(r => r.file === process.env.DUMP)) for (const k of ['ref', 'ours', 'diff']) fs.writeFileSync(`/tmp/dump_${k}.png`, Buffer.from(r._img[k].split(',')[1], 'base64'));
 const has = (r, re) => r.active.some(n => re.test(n));
 const pick = [];
-const want = [[/^托盘_\d+$/, '开局'], [/^纸箱_.*(张开|3D序列)/, '纸箱'], [/^Nice_/, 'Nice'], [/^咖啡杯_/, '落杯'], [/^结束页/, '结束卡']];
+const want = [[/^炮台_/, '开局'], [/^小球_/, '射击'], [/^碎屑_/, '命中碎屑'], [/^数字_/, '数字'], [/^结果_/, '通关'], [/^结束页/, '结束卡']];
 for (const [re, label] of want) {
-  const cands = res.filter(r => has(r, re) && !pick.some(p => p.r === r) && (label === '结束卡' || !has(r, /^结束页/)) && (label !== '开局' || r.t < 1.5));
+  const cands = res.filter(r => has(r, re) && !pick.some(p => p.r === r) && (label === '结束卡' || !has(r, /^结束页/)) && (label !== '开局' || r.t < 1.0));
   if (!cands.length) continue;
   let c = cands[Math.floor(cands.length / 2)];
   pick.push({ r: c, label });
 }
-const tmp = '/tmp/coffee_aecheck'; fs.rmSync(tmp, { recursive: true, force: true }); fs.mkdirSync(tmp);
+const tmp = '/tmp/bs_aecheck'; fs.rmSync(tmp, { recursive: true, force: true }); fs.mkdirSync(tmp);
 const font = '/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc';
 pick.forEach((p, i) => {
   for (const k of ['ref', 'ours', 'diff']) fs.writeFileSync(`${tmp}/${k}${i}.png`, Buffer.from(p.r._img[k].split(',')[1], 'base64'));
@@ -102,4 +103,4 @@ const inputs = rows.flatMap(k => pick.map((_, i) => `-i ${tmp}/s_${k}${i}.png`))
 const fc = rows.map((k, ri) => `${pick.map((_, i) => `[${ri * n + i}]`).join('')}hstack=${n}[r${ri}]`).join(';') + `;[r0][r1][r2]vstack=3`;
 execSync(`ffmpeg -v error -y ${inputs} -filter_complex "${fc}" -q:v 4 ${process.env.CHECK_OUT || root + '/screenshots/ae_export_check.jpg'}`);
 console.log('picked', pick.map(p => `${p.label}@${p.r.t.toFixed(2)} psnr ${p.r.psnr.toFixed(1)} big ${p.r.bigPct.toFixed(2)}%`).join(' | '), 'errors', errors);
-fs.writeFileSync('/tmp/coffee_aecheck/results.json', JSON.stringify(res.map(r => ({ file: r.file, t: r.t, mean: r.mean, psnr: r.psnr, bigPct: r.bigPct }))));
+fs.writeFileSync('/tmp/bs_aecheck/results.json', JSON.stringify(res.map(r => ({ file: r.file, t: r.t, mean: r.mean, psnr: r.psnr, bigPct: r.bigPct }))));

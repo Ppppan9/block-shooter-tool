@@ -1,27 +1,23 @@
 {
-  "name": "coffee-sort-tool",
-  "version": "1.2.2",
-  "description": "咖啡分拣核玩工具（单文件离线版）",
+  "name": "block-shooter-tool",
+  "version": "1.0.0",
+  "description": "方块射击核玩工具（单文件离线版）",
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
     "test": "node test/run-test.mjs",
     "test:logic": "node test/logic-test.mjs",
-    "test:ae": "node test/ae-export.mjs && node test/ae-mock.mjs /workspace/coffee_ae_sample.zip && node test/ae-composite.mjs",
-    "test:3d": "R3D=1 E3D=1 node test/ae-export.mjs && bash test/export3d-blender.sh",
+    "test:ae": "node test/ae-export.mjs && node test/ae-mock.mjs /workspace/block_shooter_ae_sample.zip && node test/ae-composite.mjs",
+    "test:ae3d": "npm run test:ae",
+    "test:3d": "E3D=1 node test/ae-export.mjs && bash test/export3d-blender.sh",
+    "test:clip": "node test/clip-test.mjs",
     "test:shape": "node test/shape-test.mjs",
     "test:norec": "node test/no-autorec.mjs",
-    "test:drag": "node test/drag-test.mjs",
-    "test:ae3d": "R3D=1 AE_OUT=/tmp/coffee_ae3d AE_ZIP=/workspace/coffee_ae3d_sample.zip node test/ae-export.mjs && node test/ae-mock.mjs /workspace/coffee_ae3d_sample.zip && CHECK_OUT=screenshots/ae_export_check_3d.jpg node test/ae-composite.mjs /workspace/coffee_ae3d_sample.zip /tmp/coffee_ae3d/snaps",
-    "test:clip": "node test/clip-test.mjs",
-    "test:fill": "node test/cup-fill.mjs",
-    "test:boxpack": "node test/box-pack.mjs",
-    "test:cursor": "node test/cursor-test.mjs",
-    "test:bowls": "node test/bowl-test.mjs"
+    "test:cursor": "node test/cursor-test.mjs"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Ppppan9/coffee-sort-tool.git"
+    "url": "git+https://github.com/Ppppan9/block-shooter-tool.git"
   },
   "license": "ISC",
   "devDependencies": {
