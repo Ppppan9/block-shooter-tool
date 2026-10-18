@@ -15,8 +15,11 @@ for (const [name, mime] of Object.entries(shapes)) {
     else { g.fillStyle = '#f2c230'; g.beginPath(); g.arc(48, 40, 36, 0, Math.PI * 2); g.fill(); g.fillStyle = '#222222'; g.fillRect(32, 24, 8, 12); g.fillRect(56, 24, 8, 12); g.lineWidth = 6; g.strokeStyle = '#222222'; g.beginPath(); g.arc(48, 44, 18, 0.2, Math.PI - 0.2); g.stroke(); }
     const url = c.toDataURL(mime); const real = url.slice(5, url.indexOf(';'));
     const ref = g.getImageData(0, 0, 96, 80).data;
-    __game.set('shapeW', 24); __game.set('shapeDepth', 3); __game.set('shapeColors', 4); __game.set('shapePalette', 'auto'); __game.set('level', 'image'); __game.set('shapeImg', url);
-    for (let i = 0; i < 50 && !(__game.L && __game.L.W === 24 && __game.L.palette[0].startsWith('img')); i++) await new Promise(r => setTimeout(r, 100));
+    __game.set('shapeW', 24); __game.set('shapeDepth', 3); __game.set('shapeColors', 4); __game.set('shapePalette', 'auto'); __game.set('level', 'image');
+    const gen0 = __game.shapeGen || 0;
+    __game.set('shapeImg', url);
+    for (let i = 0; i < 100 && (!(__game.L && __game.L.W === 24 && __game.L.palette[0].startsWith('img') && __game.S.shapeImg === url) || (__game.shapeGen || 0) <= gen0); i++) await new Promise(r => setTimeout(r, 50));
+    if ((__game.shapeGen || 0) <= gen0 || __game.S.shapeImg !== url) throw new Error('shape level did not rebuild for ' + name + ' gen=' + __game.shapeGen + '/' + gen0);
     const L = __game.L, st = __game.st, G = __game.G;
     // alpha ↔ 体素柱（与生成同一采样：先缩放到 W×H 再逐像素）
     const H = L.H, cc = document.createElement('canvas'); cc.width = L.W; cc.height = H; const g2 = cc.getContext('2d'); g2.imageSmoothingEnabled = true; const im = new Image(); im.src = url; await im.decode(); g2.drawImage(im, 0, 0, L.W, H); const px = g2.getImageData(0, 0, L.W, H).data;
