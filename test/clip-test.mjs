@@ -12,7 +12,7 @@ let total = 0; const out = [];
 for (const cs of CASES) {
   const p = await b.newPage(); const errs = []; p.on('pageerror', e => errs.push(String(e)));
   await p.goto('file://' + process.cwd() + '/index.html'); await p.waitForTimeout(500);
-  const cfg = cs === 'ref' ? { level: 'ref', refDepth: +(process.env.REF_D || 46) } : { level: 'random', seed: +cs.replace('rand', ''), randW: 10, randH: 6, randD: 4, randColors: 4 };
+  const cfg = cs === 'ref' ? { level: 'reference', refDepth: +(process.env.REF_D || 10) } : { level: 'random', seed: +cs.replace('rand', ''), randW: 10, randH: 6, randD: 4, randColors: 4 };
   const r = await p.evaluate(async ([cfg, TOL, maxS]) => {
     Math.random = (() => { let s = 11; return () => { s = (s * 16807) % 2147483647; return s / 2147483647; }; })();
     for (const [k, v] of Object.entries(cfg)) __game.set(k, v);
