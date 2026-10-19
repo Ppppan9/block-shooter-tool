@@ -1,5 +1,7 @@
 # 方块射击核玩工具（block-shooter-tool）
 
+## v1.0.10：H5 预览机型/尺寸（预览+导出；adaptive=全机型）
+
 单文件离线网页工具（`index.html`，无 CDN），复刻“方块射击 / 炮台打同色体素”手游广告玩法，用于录制广告素材、导出 AE 工程与 3D 动画。遵守核玩工具通用规范（`/workspace/game-toolkit-standard/TOOLKIT_STANDARD.md`：统一按钮、设置键名、导出包结构、默认麻将手指、hideCursor）。
 
 在线：https://ppppan9.github.io/block-shooter-tool/
