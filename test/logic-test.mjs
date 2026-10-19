@@ -1,15 +1,25 @@
-import { refQueues, refVolume, makeLevel, simulate, randomVolume, volumeFromImage, initState, exposedAt, idx } from '../src/level.js';
+import { refQueues, refVolume, makeLevel, simulate, randomVolume, volumeFromImage, initState, exposedAt, frontExposedAt, isFrontTarget, availCount, removeVoxel, coords, idx } from '../src/level.js';
 let fail = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fail++; };
 const V = refVolume(); const cnt = V.palette.map((_, c) => V.vox.filter(v => v === c + 1).length);
 ok(V.W === 31 && V.H === 13 && V.D === 46, `参考体素 31×13×46，各色 ${V.palette.map((p, c) => p + ':' + cnt[c]).join(' ')}`);
 const st = initState(V); ok(st.exp[2].size > 0 && st.exp[3].size === 0, `初始外露：黑 ${st.exp[2].size}，黄 ${st.exp[3].size}（黄色藏在黑色下面，参考 0–14s 黄炮台等待）`);
+// 正面朝向炮台才可打：开局黑虽顶面外露但正面未开 → 不可打；绿/紫正面可打；黄仍不可打
+ok(availCount(V, st, 2) === 0 && availCount(V, st, 3) === 0, `初始可打：黑 ${availCount(V, st, 2)} 黄 ${availCount(V, st, 3)}（仅正面外露可打）`);
+ok(availCount(V, st, 1) > 0 && availCount(V, st, 0) > 0, `初始可打：绿 ${availCount(V, st, 1)} 紫 ${availCount(V, st, 0)}`);
+ok([...st.exp[1]].every(m => { const [i, j, k] = coords(V, m); return !isFrontTarget(V, st, m) || frontExposedAt(V, st.vox, i, j, k); }), '绿可打子集均满足 frontExposedAt');
+// 清掉中线绿条若干层后，更深的绿变为正面可打；黑仍须等绿开路
+{ const st2 = initState(V); const cx = 15; let cleared = 0;
+  for (let k = 0; k < 16; k++) for (let j = 0; j < V.H; j++) { const n = idx(V, cx, j, k); if (st2.vox[n] === 2) { removeVoxel(V, st2, n); cleared++; } }
+  ok(cleared > 0 && availCount(V, st2, 2) > 0, `清中线绿 ${cleared} 后黑正面可打 ${availCount(V, st2, 2)}（黄 ${availCount(V, st2, 3)}）`);
+}
+
 // 正面中线是绿色竖条
 ok([...Array(12).keys()].every(j => V.vox[idx(V, 15, j, 0)] === 2), '正面中线 1 格宽绿色竖条（12 层）');
 const t0 = Date.now(); const L = makeLevel(refVolume({ D: 14 }), { prefs: ['black', 'green', 'purple', 'yellow', 'green', 'black'] });
 ok(L && L.plan.every(s => s.ammo > 0 && s.ammo <= 200), `参考关（D=14）炮台 ${L.plan.length} 个，弹药合计 ${L.plan.reduce((a, s) => a + s.ammo, 0)} = 方块 ${L.voxels}`);
 ok(L.plan.reduce((a, s) => a + s.ammo, 0) === L.voxels, '弹药总数 = 方块总数（每颗球都消除一个方块）');
 const r = simulate(L); ok(r.ok, `参考关模拟通关 ${JSON.stringify(r)} ${Date.now() - t0}ms`);
-for (const seed of [1, 2, 3, 4, 5, 42]) { const Lr = makeLevel(randomVolume({ seed, colors: 2 + seed % 4 }), { seed }); const rr = simulate(Lr, { parallel: 1 + seed % 5 }); ok(Lr && rr.ok, `随机关 seed=${seed} 炮台 ${Lr.plan.length} 并行 ${1 + seed % 5}：${JSON.stringify(rr)}`); }
+for (const seed of [1, 2, 3, 4, 5, 42]) { const par = 1 + seed % 5; const Lr = makeLevel(randomVolume({ seed, colors: 2 + seed % 4 }), { seed, parallel: par }); const rr = simulate(Lr, { parallel: par }); ok(Lr && rr.ok, `随机关 seed=${seed} 炮台 ${Lr.plan.length} 并行 ${par}：${JSON.stringify(rr)}`); }
 { const Lq = refQueues(refVolume({ D: 10 })); const r2 = simulate(Lq); ok(Lq.queues.every(q => q.length >= 18) && Lq.queues.map(q => Lq.palette[q[0].color]).join() === 'black,green,purple,yellow,green,black' && r2.ok, `参考队列（6 列单色，200 弹药，D=10）动态通关 ${JSON.stringify(r2)}`); }
 // 图片：中心圆 + 透明
 const w = 40, h = 30, px = new Uint8Array(w * h * 4); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const q = (y * w + x) * 4, d = Math.hypot(x - 20, y - 15); if (d < 13) { px[q] = d < 6 ? 255 : 120; px[q + 1] = d < 6 ? 220 : 30; px[q + 2] = d < 6 ? 0 : 200; px[q + 3] = 255; } }

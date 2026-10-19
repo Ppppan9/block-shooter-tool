@@ -1,5 +1,13 @@
 # PROGRESS（方块射击核玩工具 block-shooter-tool）
 
+## v1.0.1（2026-10-19）
+- ✅ 射击目标改为仅「正面朝向炮台」外露（`frontExposedAt` / `isFrontTarget`）；渲染仍用任意面 `exposedAt`
+- ✅ 去掉 `pickTargetLOS` 隧道/竖井钻内腔弹道；选目标稳定序 (k,j,i)
+- ✅ simulate / nextAuto：进槽前 avail≥ammo；计划关不足时回退动态选色
+- ✅ `ref/AUDIT_ANIM.md` 模型/动画审计；logic 正面可打断言
+
+# PROGRESS（方块射击核玩工具 block-shooter-tool）
+
 ## v1.0.0（2026-10-19）
 - ✅ M1–M2：ANALYSIS、核心逻辑、three.js 场景、弹道避障、自动通关、参考/随机/图片可解生成
 - ✅ M4：AE 导出（PSNR ~33 dB）、3D 导出（Blender PASS，PSNR 22–28 dB）

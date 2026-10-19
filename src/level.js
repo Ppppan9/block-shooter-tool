@@ -1,7 +1,7 @@
 // 方块射击：体素关卡 + 规则（纯逻辑，无渲染）。参考视频逐帧分析见 ref/ANALYSIS.md
 // 坐标：i = x 列（0..W-1，左→右），j = 层（0..H-1，下→上），k = 深度（0 = 正面/最靠近炮台，D-1 = 最远）
-// 规则（参考核实）：点击某列队首炮台 → 跳到最左空槽位（共 5 个）；槽位里的炮台只打“同色且外露”的方块（外露 = 上/前/左/右任一面为空，
-// 背面越界不算，内部空腔算），每发一颗小球，弹药计数 −1，命中即消除；弹药打光 → 炮台离场、槽位空出；暂时没有可打目标 → 原地等待。
+// 规则（参考核实）：点击某列队首炮台 → 跳到最左空槽位（共 5 个）；槽位里的炮台只打“同色且正面朝向炮台外露”的方块
+// （正面 = k===0 或 k-1 为空；顶/侧/背腔内露仅用于渲染，不可打），每发一颗小球，弹药计数 −1，命中即消除；弹药打光 → 炮台离场、槽位空出；暂时没有可打目标 → 原地等待。
 // 胜利：方块全部消除。失败（参考未出现，按同类玩法补）：5 个槽位全满且没有任何炮台能射击、也没有飞行中的球。
 export const COLORS = ['purple', 'green', 'black', 'yellow', 'red', 'blue', 'orange', 'pink'];
 export const SLOTS = 5, COLS = 6;
@@ -29,6 +29,15 @@ export function exposedAt(L, vox, i, j, k) {
   const { W, H, D } = L, e = (a, b, c) => vox[idx(L, a, b, c)] === 0;
   return j === H - 1 || e(i, j + 1, k) || k === 0 || e(i, j, k - 1) || i === 0 || e(i - 1, j, k) || i === W - 1 || e(i + 1, j, k) || (k < D - 1 && e(i, j, k + 1));
 }
+// 可打目标：仅「朝向炮台/槽位」的正面外露（k=0 或 k-1 为空）。顶面/侧面/背腔内露只用于渲染外露面，不算射击目标。
+export function frontExposedAt(L, vox, i, j, k) {
+  return k === 0 || vox[idx(L, i, j, k - 1)] === 0;
+}
+export function isFrontTarget(L, st, m) {
+  if (!st.vox[m] || st.claimed[m]) return false;
+  const [i, j, k] = coords(L, m);
+  return frontExposedAt(L, st.vox, i, j, k);
+}
 // 状态：外露集合按颜色维护（增量更新）
 export function initState(L) {
   const st = { vox: L.vox.slice(), exp: L.palette.map(() => new Set()), left: L.palette.map(() => 0), claimed: new Uint8Array(L.vox.length), total: 0 };
@@ -46,22 +55,27 @@ export function removeVoxel(L, st, n) {
   return true;
 }
 // 可打目标数 = 外露且未被飞行中的球预定
-export function availCount(st, c, outstanding = 0) { let n = 0; for (const m of st.exp[c]) if (!st.claimed[m]) n++; return n - outstanding; }
+export function availCount(L, st, c, outstanding = 0) { let n = 0; for (const m of st.exp[c]) if (isFrontTarget(L, st, m)) n++; return n - outstanding; }
 // 选目标：外露、同色、未预定，离炮口最近（世界坐标距离；参考：先打靠近炮台的正面低处，逐渐向两侧/深处扩散）
 export function pickTarget(L, st, c, wx, wz, wy = 0, worldOf) {
   let best = -1, bd = 1e18;
-  for (const m of st.exp[c]) { if (st.claimed[m]) continue; const p = worldOf(m), d = (p[0] - wx) ** 2 + (p[1] - wy) ** 2 * 0.6 + (p[2] - wz) ** 2; if (d < bd) { bd = d; best = m; } }
+  for (const m of st.exp[c]) {
+    if (!isFrontTarget(L, st, m)) continue;
+    const [i, j, k] = coords(L, m), p = worldOf(m);
+    const d = k * 1e9 + j * 1e5 + i * 100 + ((p[0] - wx) ** 2 + (p[1] - wy) ** 2 * 0.6 + (p[2] - wz) ** 2) * 1e-3;
+    if (d < bd) { bd = d; best = m; }
+  }
   return best;
 }
 export const roundAmmo = (a, step = 10) => a >= step ? Math.floor(a / step) * step : a;
-// 生成炮台序列（保证可解）：每个新炮台的弹药 ≤ 该色当前“外露且未被其他炮台预支”的方块数——外露只增不减（消除只会让更多方块外露），
-// 所以每个炮台一定能把弹药全部打完，永远不会卡在槽位里；按此顺序依次点击即通关（并行最多 K 个）。
+// 生成炮台序列（保证可解）：每个新炮台的弹药 ≤ 该色当前“正面外露且未被预支”的方块数。
+// 正面外露只增不减；选目标按 (k,j,i) 稳定序，生成器与模拟/自动通关一致，避免因炮位距离不同选错列而卡死。
 export function planShooters(L, o = {}) {
   const maxAmmo = o.maxAmmo || 200, K = o.parallel || 3, step = o.ammoStep || 10, st = initState(L), worldOf = o.worldOf || (m => { const [i, j, k] = coords(L, m); return [i, j, -k]; });
   const plan = [], active = [], outst = L.palette.map(() => 0); let guard = 0;
   while (st.total > 0 && guard++ < 1e6) {
     while (active.length < K) {
-      let bc = -1, ba = 0; for (let c = 0; c < L.palette.length; c++) { const a = availCount(st, c, outst[c]); if (a > ba) { ba = a; bc = c; } }
+      let bc = -1, ba = 0; for (let c = 0; c < L.palette.length; c++) { const a = availCount(L, st, c, outst[c]); if (a > ba) { ba = a; bc = c; } }
       if (bc < 0) break; const ammo = Math.min(maxAmmo, roundAmmo(ba, step)); const s = { color: bc, ammo, id: plan.length }; plan.push(s); active.push({ s, left: ammo, x: (o.slotX || [0])[active.length % (o.slotX || [0]).length] }); outst[bc] += ammo;
     }
     if (!active.length) return null; // 不应发生
@@ -125,7 +139,7 @@ export function simulate(L, o = {}) {
   if (L.dynamic) return simulateDynamic(L, o);
   while (st.total > 0 && ticks++ < 1e6) {
     const busy = slots.filter(Boolean).length;
-    if (busy < K && order.length) { const s = order[0], c = L.queues.findIndex((q, ci) => q[fronts[ci]] === s); if (c < 0) return { ok: false, reason: 'order' }; const si = slots.indexOf(null); if (si < 0) return { ok: false, reason: 'full' }; slots[si] = { s, left: s.ammo, si }; fronts[c]++; order.shift(); taps++; continue; }
+    if (busy < K && order.length) { const s = order[0], c = L.queues.findIndex((q, ci) => q[fronts[ci]] === s); if (c < 0) return { ok: false, reason: 'order' }; const out = slots.filter(x => x && x.s.color === s.color).reduce((a, x) => a + x.left, 0); if (availCount(L, st, s.color, out) < s.ammo) { if (!busy) return { ok: false, reason: 'wait', left: st.total, need: s.ammo, avail: availCount(L, st, s.color, out) }; } else { const si = slots.indexOf(null); if (si < 0) return { ok: false, reason: 'full' }; slots[si] = { s, left: s.ammo, si }; fronts[c]++; order.shift(); taps++; continue; } }
     let fired = 0;
     for (const sl of slots) { if (!sl) continue; const m = pickTarget(L, st, sl.s.color, sl.si * 3 - 6, 6, 0, worldOf); if (m < 0) continue; removeVoxel(L, st, m); sl.left--; shots++; fired++; if (!sl.left) slots[sl.si] = null; }
     if (!fired && !order.length) return { ok: false, reason: 'stuck', left: st.total };
@@ -141,7 +155,7 @@ export function simulateDynamic(L, o = {}) {
   while (st.total > 0 && ticks++ < 2e6) {
     for (const sl of slots) if (sl && st.left[sl.s.color] === 0) slots[sl.si] = null;
     const busy = slots.filter(Boolean).length;
-    if (busy < K) { let bc = -1, ba = 0; L.queues.forEach((q, c) => { const s = q[fronts[c]]; if (!s) return; const out = slots.filter(x => x && x.s.color === s.color).reduce((a, x) => a + x.left, 0), a = availCount(st, s.color, out); if (a > ba) { ba = a; bc = c; } });
+    if (busy < K) { let bc = -1, ba = 0; L.queues.forEach((q, c) => { const s = q[fronts[c]]; if (!s) return; const out = slots.filter(x => x && x.s.color === s.color).reduce((a, x) => a + x.left, 0), a = availCount(L, st, s.color, out); if (a > ba) { ba = a; bc = c; } });
       if (bc >= 0) { const s = L.queues[bc][fronts[bc]], si = slots.indexOf(null); slots[si] = { s, left: s.ammo, si }; fronts[bc]++; taps++; continue; } }
     let fired = 0;
     for (const sl of slots) { if (!sl) continue; const m = pickTarget(L, st, sl.s.color, sl.si * 3 - 6, 6, 0, worldOf); if (m < 0) continue; removeVoxel(L, st, m); sl.left--; shots++; fired++; if (!sl.left) slots[sl.si] = null; }

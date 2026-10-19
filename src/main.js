@@ -1,4 +1,4 @@
-import { refVolume, refQueues, randomVolume, volumeFromImage, makeLevel, initState, removeVoxel, coords, idx, availCount, SLOTS, COLS, COLORS } from './level.js';
+import { refVolume, refQueues, randomVolume, volumeFromImage, makeLevel, initState, removeVoxel, coords, idx, availCount, isFrontTarget, SLOTS, COLS, COLORS } from './level.js';
 import { GROUPS, DEFS, loadSettings, saveSettings, migrate, exportJSON, APP_ID } from './settings.js';
 import { mk, drawBackground, drawDisclaimer, drawResult, drawEnd } from './render2d.js';
 import { Sfx } from './audio.js';
@@ -107,7 +107,7 @@ const FACES = [[0, 1, 0], [0, 0, 1], [-1, 0, 0], [1, 0, 0], [0, 0, -1]];
 function hitPoint(n, from) {
   const [i, j, k] = coords(L, n), c = Wd.vox(n); let best = null, bs = -1e9;
   for (const f of FACES) { const a = i + f[0], b = j + f[1], kk = k - f[2]; const open = b >= L.H || kk < 0 || a < 0 || a >= L.W || (kk < L.D && st.vox[idx(L, a, b, kk)] === 0); if (!open || kk >= L.D) continue;
-    const dx = from[0] - c[0], dy = from[1] - c[1], dz = from[2] - c[2], sc = (f[0] * dx + f[1] * dy + f[2] * dz) / Math.hypot(dx, dy, dz) + (f[1] ? 0.15 : 0); if (sc > bs) { bs = sc; best = f; } }
+    const dx = from[0] - c[0], dy = from[1] - c[1], dz = from[2] - c[2], sc = (f[0] * dx + f[1] * dy + f[2] * dz) / Math.hypot(dx, dy, dz) + (f[1] ? 0.15 : 0) + (f[2] === 1 ? 0.35 : 0); if (sc > bs) { bs = sc; best = f; } }
   if (!best) best = [0, 1, 0]; const off = Wd.vs / 2 + S.ballR + 0.02;
   return { p: [c[0] + best[0] * off, c[1] + best[1] * off, c[2] + best[2] * off], nrm: best };
 }
@@ -125,20 +125,15 @@ function sphereHitsVox(p, r, skip) { // 球与已占方块（圆角忽略，按�
 }
 function pickTargetLOS(sh, muz) {
   const c = sh.color, cand = [];
-  for (const m of st.exp[c]) { if (st.claimed[m]) continue; const p = Wd.vox(m), d = (p[0] - muz[0]) ** 2 + (p[1] - muz[1]) ** 2 * 0.6 + (p[2] - muz[2]) ** 2; cand.push([d, m]); }
+  // 只打正面朝向炮台外露的同色方块（k=0 或 k-1 空）；不再沿顶/侧/背法线钻进内腔
+  for (const m of st.exp[c]) { if (!isFrontTarget(L, st, m)) continue; const p = Wd.vox(m), d = (p[0] - muz[0]) ** 2 + (p[1] - muz[1]) ** 2 * 0.6 + (p[2] - muz[2]) ** 2; cand.push([d, m]); }
   if (!cand.length) return null; cand.sort((a, b) => a[0] - b[0]);
   const clear = (path, m) => { const p0 = path(0), p1 = path(0.5), p2 = path(1), len = Math.hypot(p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]) + Math.hypot(p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]), n = Math.max(12, Math.ceil(len / (S.ballR * 0.5))); for (let s = 1; s <= n; s++) if (sphereHitsVox(path(s / n), S.ballR + 0.005, -1)) return false; return true; }; // 弹道逐段（≤ 半个球半径）检查不穿方块
   const top = L.H * Wd.vs;
+  // 平射 / 抛物线越过挡块，落到正面；去掉「沿法线钻隧道/竖井」入口（避免先打到深处非正面格）
   for (const arc of [S.ballArc, S.ballArc * 2 + 2, S.ballArc * 4 + 6, -1, -2, -3, -4]) for (let q = 0; q < Math.min(cand.length, 80); q++) { const m = cand[q][1], hp = hitPoint(m, muz), n = hp.nrm;
-    const LOB = { '-1': [3, 3], '-2': [10, 1.5], '-3': [10, 5], '-4': [18, 3] }[arc] || [0, 0], hh = top + LOB[0], dd = Wd.vs * LOB[1], ctrl = arc >= 0 ? null : [[muz[0], hh, muz[2]], [hp.p[0] + n[0] * dd, hh, hp.p[2] + n[2] * dd]]; // 沿外露面法线方向从上方落入（侧面 / 坑里的方块）
+    const LOB = { '-1': [3, 3], '-2': [10, 1.5], '-3': [10, 5], '-4': [18, 3] }[arc] || [0, 0], hh = top + LOB[0], dd = Wd.vs * LOB[1], ctrl = arc >= 0 ? null : [[muz[0], hh, muz[2]], [hp.p[0] + n[0] * dd, hh, hp.p[2] + n[2] * dd]];
     const path = ballPath(muz, hp.p, arc, ctrl); if (clear(path, m)) return { m, hp, path }; }
-  // 隧道 / 竖井：沿外露面法线逐格走出体块，入口外先对准法线，再直线飞入（参考：中线被打穿后小球沿通道飞进去）
-  for (let q = 0; q < Math.min(cand.length, 80); q++) { const m = cand[q][1], hp = hitPoint(m, muz), n = hp.nrm; const [i0, j0, k0] = coords(L, m); let a = i0, b = j0, c = k0, steps = 0, out = false;
-    while (steps++ < 80) { a += n[0]; b += n[1]; c -= n[2]; if (a < 0 || b < 0 || c < 0 || a >= L.W || b >= L.H || c >= L.D) { out = true; break; } if (st.vox[idx(L, a, b, c)]) break; }
-    if (!out) continue; const E = [hp.p[0] + n[0] * (steps + 0.5) * Wd.vs, hp.p[1] + n[1] * (steps + 0.5) * Wd.vs, hp.p[2] + n[2] * (steps + 0.5) * Wd.vs];
-    for (const lift of [0, 3, 8]) { const dE = Math.hypot(E[0] - muz[0], E[1] - muz[1], E[2] - muz[2]), C = [E[0] + n[0] * dE * 0.5, E[1] + n[1] * dE * 0.5 + lift, E[2] + n[2] * dE * 0.5], A = ballPath(muz, E, 0, C), lB = Math.hypot(E[0] - hp.p[0], E[1] - hp.p[1], E[2] - hp.p[2]), wA = dE / (dE + lB);
-      const path = u => u < wA ? A(u / wA) : (v => [E[0] + (hp.p[0] - E[0]) * v, E[1] + (hp.p[1] - E[1]) * v, E[2] + (hp.p[2] - E[2]) * v])((u - wA) / (1 - wA));
-      if (clear(path, m)) return { m, hp, path }; } } // 先平射，挡住时抬高抛物线越过
   const m = cand[0][1], hp = hitPoint(m, muz); if (window.__dbgBlocked) (window.__blk = window.__blk || []).push({ why: (() => { const hh = top + 10, dd = Wd.vs * 1.5, n2 = hp.nrm, path = ballPath(muz, hp.p, -2, [[muz[0], hh, muz[2]], [hp.p[0] + n2[0] * dd, hh, hp.p[2] + n2[2] * dd]]); for (let q = 1; q <= 200; q++) { const h = sphereHitsVox(path(q / 200), S.ballR + 0.005, -1); if (h) return [q / 200, h.n, coords(L, h.n), path(q / 200).map(x => +x.toFixed(2))]; } return null; })(), n: cand.length, m, c: coords(L, m), nrm: hp.nrm, muz, nb: [[0,1,0],[0,0,-1],[-1,0,0],[1,0,0],[0,0,1]].map(f => { const [i, j, k] = coords(L, m), a = i + f[0], b = j + f[1], c = k + f[2]; return a < 0 || b < 0 || c < 0 || a >= L.W || b >= L.H || c >= L.D ? 'out' : st.vox[idx(L, a, b, c)]; }) }); return { m, hp, path: ballPath(muz, hp.p, S.ballArc * 8 + 12), blocked: true }; // 全部被挡：先等待（其它炮台会打开通路），超时才高抛
 }
 function playShot(t) { shotSfxT = shotSfxT.filter(x => t - x < 1000); if (shotSfxT.length < S.sfxShootMax) { shotSfxT.push(t); sfx.play('shoot', S); } }
@@ -197,7 +192,7 @@ function step(t) {
   G.pops = G.pops.filter(p => t - p.t0 < S.popDur);
   // 胜负
   if (!finishedAt && st.total === 0 && !G.balls.some(b => b.ph === 'fly')) { finishedAt = t; onFinish(); }
-  if (!finishedAt && !failedAt && S.loseRule === 'on' && G.slots.every(s => s && s.state === 'slot') && !G.balls.some(b => b.ph === 'fly') && G.slots.every(s => s.left > 0 && st.left[s.color] > 0 && availCount(st, s.color) <= 0)) { failedAt = t; sfx.play('error', S); status('槽位已满且都没有可打的方块（失败）——点“↻ 重新开始”'); window.__failed = true; }
+  if (!finishedAt && !failedAt && S.loseRule === 'on' && G.slots.every(s => s && s.state === 'slot') && !G.balls.some(b => b.ph === 'fly') && G.slots.every(s => s.left > 0 && st.left[s.color] > 0 && availCount(L, st, s.color) <= 0)) { failedAt = t; sfx.play('error', S); status('槽位已满且都没有可打的方块（失败）——点“↻ 重新开始”'); window.__failed = true; }
 }
 
 // ---------- 场景（每帧元素列表；页面 3D / AE / 3D 导出同源）----------
@@ -302,14 +297,14 @@ function nextAuto() {
   if (!free || active >= S.autoParallel) return { wait: true };
   if (G.queues[nx.col][0] !== nx) return { wait: true };
   const outst = G.slots.filter(s => s && s.color === nx.color).reduce((a, s) => a + s.left, 0);
-  if (availCount(st, nx.color, outst) < nx.ammo && active > 0) return { wait: true };
+  if (availCount(L, st, nx.color, outst) < nx.ammo) return active > 0 ? { wait: true } : nextAutoDynamic(); // 正面可打不足：有槽内炮台则等；否则退回按外露动态选
   return { sh: nx };
 }
 function nextAutoDynamic() {
   // 参考开局：黄（第 4 列）→ 黑（第 1 列）→ 绿（第 2 列）依次进槽（0.4 / 1.2 / 2.0 s），之后按外露可打数动态选择
   if (S.refOpening && G.taps < 3) { const c = [3, 0, 1][G.taps], sh = G.queues[c][0]; if (sh && G.slots.indexOf(null) >= 0) return { sh }; }
   const active = G.slots.filter(s => s && s.state !== 'leave').length; if (G.slots.indexOf(null) < 0 || active >= S.autoParallel) return { wait: true };
-  let best = null, ba = 0; for (let c = 0; c < COLS; c++) { const sh = G.queues[c][0]; if (!sh) continue; const out = G.slots.filter(s => s && s.color === sh.color).reduce((a, s) => a + s.left, 0), a = availCount(st, sh.color, out); if (a > ba) { ba = a; best = sh; } }
+  let best = null, ba = 0; for (let c = 0; c < COLS; c++) { const sh = G.queues[c][0]; if (!sh) continue; const out = G.slots.filter(s => s && s.color === sh.color).reduce((a, s) => a + s.left, 0), a = availCount(L, st, sh.color, out); if (a > ba) { ba = a; best = sh; } }
   if (!best) return G.shooters.some(s => s.state === 'queue') ? { wait: true } : null; return { sh: best };
 }
 async function autoSolve() {
