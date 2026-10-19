@@ -6,7 +6,7 @@
 
 ## 玩法
 - **体素关卡**：参考关 31×13×46（紫壳 + 绿菱形漏斗 + 正面绿中线 + 黑/黄夹层）；随机生成 / 导入透明 PNG/WebP（每像素 → 一根体素柱，alpha = 无方块，颜色量化）。
-- **6 列队列 + 5 个槽位**：点击队首炮台 → 跳到最左空槽；槽内同色**任一面外露**目标自动射击（约 12 发/秒；一发一格）；弹药打光离场；无目标时等待。
+- **6 列队列 + 5 个槽位**：点击队首炮台 → 跳到最左空槽；槽内同色**正面朝向炮台外露**目标自动射击（约 12 发/秒；一发一格）；弹药打光离场；无目标时等待。
 - 小球带弹道避障（平射 / 抛物线 / 隧道沿法线飞入），命中消除 + 弹开物理 + 碎屑。
 - **▶ 自动通关**：参考关按开局黄→黑→绿，之后按外露可打数动态点击；随机/图片关按生成器计划顺序（弹药 ≤ 外露未预支 → 永不卡死）。
 - 默认手指 = 麻将工具同款（`src/default_hand.js`）；`hideCursor` 默认开（手指出现在画面上时画布 `cursor:none`）。
@@ -35,6 +35,7 @@ npm run test:cursor  # hideCursor + 默认麻将手指
 - `screenshots/mid_ref_*.png`、`mid_game.png`、`audit_mid_flight.png`：中局 3D
 - `screenshots/queue_bob_*.png`、`aim_yaw_fire.png`：队列呼吸 / 射击转向
 - `screenshots/v103_*.png`：v1.0.3 任意外露面命中 / 前两行呼吸 / 果冻消除 / 球与描边
+- `screenshots/v104_*.png`：v1.0.4 正面可打 / 珍珠白珠 / 缎面果冻方块 / 命中碎裂球消失；`v104_hit_metrics.json`
 - `screenshots/shape_*.png`：图片导入关
 - `screenshots/ae_export_check.jpg`、`export3d_blender_compare.jpg`：导出校验
 

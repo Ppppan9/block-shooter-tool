@@ -11,7 +11,8 @@ let shared = null;
 export function geos(S) {
   if (shared && shared.key === S.voxRound + '|' + S.voxGap) return shared;
   const g = 1 - S.voxGap, r = Math.min(0.45 * g, S.voxRound);
-  shared = { key: S.voxRound + '|' + S.voxGap, vox: new RoundedBoxGeometry(g, g, g, 2, r), ball: new THREE.SphereGeometry(1, 18, 12), debris: new RoundedBoxGeometry(1, 1, 1, 1, 0.15), slot: new THREE.CylinderGeometry(1, 1, 0.08, 40) };
+  // 方块：更高细分圆角（参考果冻/软糖）；球：高细分珍珠白珠
+  shared = { key: S.voxRound + '|' + S.voxGap, vox: new RoundedBoxGeometry(g, g, g, 4, r), ball: new THREE.SphereGeometry(1, 28, 20), debris: new RoundedBoxGeometry(1, 1, 1, 2, 0.2), slot: new THREE.CylinderGeometry(1, 1, 0.08, 40) };
   return shared;
 }
 const matCache = new Map();
@@ -39,22 +40,25 @@ export function makeShooter(S, color, Wd) {
   G.add(body, upper); G.userData.body = body; G.userData.upper = upper; G.userData.label = lab; G.userData.color = color;
   return G;
 }
-// 白球：半透明软光泽球体 + 淡 rim/光晕（参考珠链，非刺眼自发光盘）
+// 白球：参考亮白抛光珍珠/大理石 —— 高光体积 + Fresnel rim + 软 bloom 光晕
 export function makeBall(S) {
   const g = new THREE.Group(); g.name = 'ball';
   const glow = S.ballGlow || 0;
   const coreMat = new THREE.MeshStandardMaterial({
-    color: 0xffffff, roughness: 0.16, metalness: 0.05,
-    transparent: true, opacity: 0.9, depthWrite: true,
-    emissive: new THREE.Color(0xffffff), emissiveIntensity: glow * 0.45,
+    color: 0xffffff, roughness: 0.1, metalness: 0.12,
+    transparent: false, depthWrite: true,
+    emissive: new THREE.Color(0xfff6ff), emissiveIntensity: 0.18 + glow * 0.55,
   }); coreMat.name = 'mat_ball';
   const core = new THREE.Mesh(geos(S).ball, coreMat); core.name = 'ball_core'; g.add(core);
-  // 内层略亮的高光核（软 rim）
-  const rim = new THREE.Mesh(geos(S).ball, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.22 + glow * 0.12, depthWrite: false, toneMapped: false }));
-  rim.name = 'ball_rim'; rim.scale.setScalar(0.72); rim.renderOrder = 1; g.add(rim);
+  // 外层软 Fresnel rim（略大于核，边缘亮一圈）
+  const rim = new THREE.Mesh(geos(S).ball, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.28 + glow * 0.18, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending }));
+  rim.name = 'ball_rim'; rim.scale.setScalar(1.06); rim.renderOrder = 1; g.add(rim);
+  // 内高光核（体积感）
+  const highlight = new THREE.Mesh(geos(S).ball, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35 + glow * 0.1, depthWrite: false, toneMapped: false }));
+  highlight.name = 'ball_hi'; highlight.scale.setScalar(0.55); highlight.position.set(-0.18, 0.28, 0.15); highlight.renderOrder = 2; g.add(highlight);
   if (S.ballHalo > 1 && S.ballHaloOp > 0) {
-    const halo = new THREE.Mesh(geos(S).ball, new THREE.MeshBasicMaterial({ color: 0xfff8ff, transparent: true, opacity: S.ballHaloOp, depthWrite: false, toneMapped: false }));
-    halo.name = 'ball_halo'; halo.scale.setScalar(S.ballHalo); halo.renderOrder = 2; g.add(halo);
+    const halo = new THREE.Mesh(geos(S).ball, new THREE.MeshBasicMaterial({ color: 0xfff4ff, transparent: true, opacity: S.ballHaloOp, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending }));
+    halo.name = 'ball_halo'; halo.scale.setScalar(S.ballHalo); halo.renderOrder = 0; g.add(halo);
   }
   return g;
 }
@@ -63,8 +67,10 @@ export function create3D(opt = {}) {
   const pool = new Map(); const statics = new THREE.Group();
   function setup(S, L, W2) {
     S0 = S; L0 = L; Wd = W2; scene = new THREE.Scene(); camera = Wd.cam; pool.clear();
-    hemi = new THREE.HemisphereLight(0xffffff, 0x6a5a80, S.light3dAmbient); scene.add(hemi);
+    // 顶亮侧暗：半球地面偏冷紫灰 → 缝/侧面有 AO 感；主光高仰角勾顶面高光
+    hemi = new THREE.HemisphereLight(0xfff5ff, 0x4a3d5c, S.light3dAmbient); scene.add(hemi);
     sun = new THREE.DirectionalLight(0xffffff, S.light3dSun); const a = S.light3dAzim * Math.PI / 180, e = S.light3dElev * Math.PI / 180; sun.position.set(Math.sin(a) * Math.cos(e) * 100, Math.sin(e) * 100, Math.cos(a) * Math.cos(e) * 100); sun.target.position.set(0, 0, 0); scene.add(sun, sun.target);
+    const fill = new THREE.DirectionalLight(0xd8c8ff, S.light3dSun * 0.22); fill.position.set(-40, 35, 60); scene.add(fill);
     statics.clear(); scene.add(statics);
     // 底座：品红圆角托板
     const b = Wd.base, bw = b.x1 - b.x0, bd = b.z1 - b.z0;
@@ -72,7 +78,7 @@ export function create3D(opt = {}) {
     // 槽位：白色圆盘
     slotMeshes = Wd.slots.map(([x, z], i) => { const m = new THREE.Mesh(geos(S).slot, mat(S, S.slotColor, { name: 'mat_slot', rough: 0.5 })); m.name = 'slot_' + (i + 1); m.scale.set(S.slotR, 1, S.slotR * 0.92); m.position.set(x, 0.04, z); statics.add(m); return m; });
     // 体素：每色一个 InstancedMesh（只放外露 / 正在消除的方块）
-    voxMesh = L.palette.map((p, c) => { const m = new THREE.InstancedMesh(geos(S).vox, mat(S, colorHex(S, p), { name: 'mat_vox_' + p, rough: S.voxRough ?? 0.36 }), 16); m.name = 'voxels_' + p; m.count = 0; m.frustumCulled = false; scene.add(m); return m; });
+    voxMesh = L.palette.map((p, c) => { const m = new THREE.InstancedMesh(geos(S).vox, mat(S, colorHex(S, p), { name: 'mat_vox_' + p, rough: S.voxRough ?? 0.52 }), 16); m.name = 'voxels_' + p; m.count = 0; m.frustumCulled = false; scene.add(m); return m; });
     cap = 0;
     if (opt.exportMode) voxMesh.forEach(m => scene.remove(m));
   }

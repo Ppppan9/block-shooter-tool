@@ -122,3 +122,29 @@
 | 方块/炮台材质 | FIXED | `voxRough≈0.36` 果冻亮塑料；`tankRough≈0.72` 半哑光玩具；顶光 elev 68 |
 
 截图：`screenshots/v103_top_side_hits.png`、`v103_bob_front2.png`、`v103_jelly_pop.png`、`v103_ball_outline.png`
+
+
+---
+
+## v1.0.4 正面可打 + 材质/果冻命中（2026-10-19）
+
+### 命中规则回正（关键）
+
+用户原话「只消除最靠近发射区的那一面」= **朝向炮台/槽位的正面**（`k===0` 或 `(i,j,k-1)` 空），**不是**顶面或任意外露。
+
+| 项 | 判定 | 证据 |
+|---|---|---|
+| `shootableAt` 正面可打 | **FIXED** | `level.js`：可打 = 正面朝向炮台；`exposedAt` 仍用于 meshing |
+| 顶面/侧/背 alone 不可打 | **FIXED** | 开局黑 `availCount=0`；仅顶面外露 1318 格可打 0（`test:logic`） |
+| 一发一格 + 球体 LOS + 挡则等 | PASS | `pickTargetLOS` 候选过滤 `isShootable`；blocked→wait |
+| 命中后子弹消失 | **FIXED** | 命中 → 果冻破碎 + 同色软糖碎屑；球 `flash` ~70ms 后 `gone`（无长 bounce 珠链） |
+| 果冻破碎更浓 | **FIXED** | `jellyPop=1.25`、`popDur=220`、`debrisCount=12`、更大软糖块 |
+| 珍珠白珠 | **FIXED** | `ballR=0.34`、gloss+rim+additive halo；`ballGlow=0.55` |
+| 方块缎面果冻 | **FIXED** | `voxRound=0.26`、seg=4、`voxRough=0.52`、顶光 elev 74 / 略低 ambient |
+
+与 v1.0.1 / v1.0.3 差异：
+- **v1.0.1**：`frontExposedAt` 规则正确，但材质/果冻未到位。
+- **v1.0.3**：误把「那一面」理解成任意外露 → 顶面黑/绿过早被打（本版 bug 截图）。
+- **v1.0.4**：规则回到正面可打（命名 `shootableAt`），并补材质 + 命中果冻/球消失。
+
+证明：`screenshots/v104_hit_metrics.json`（early `topHits=0` `frontHits=355` `blackAvail0=0` `flashSeen=355`）；`v104_early/impact`、`v104_side_*.png`、`v104_mat_before_after.png`。

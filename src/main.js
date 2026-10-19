@@ -1,4 +1,4 @@
-import { refVolume, refQueues, randomVolume, volumeFromImage, makeLevel, initState, removeVoxel, coords, idx, availCount, SLOTS, COLS, COLORS } from './level.js';
+import { refVolume, refQueues, randomVolume, volumeFromImage, makeLevel, initState, removeVoxel, coords, idx, availCount, isShootable, SLOTS, COLS, COLORS } from './level.js';
 import { GROUPS, DEFS, loadSettings, saveSettings, migrate, exportJSON, APP_ID } from './settings.js';
 import { mk, drawBackground, drawDisclaimer, drawResult, drawEnd } from './render2d.js';
 import { Sfx } from './audio.js';
@@ -113,9 +113,10 @@ function currentRow(o) { const p = easeIO((now() - o.rowT) / S.advanceDur); retu
 const FACES = [[0, 1, 0], [0, 0, 1], [-1, 0, 0], [1, 0, 0], [0, 0, -1]];
 function hitPoint(n, from) {
   const [i, j, k] = coords(L, n), c = Wd.vox(n); let best = null, bs = -1e9;
+  // 正面朝向炮台（f=[0,0,1] → 检查 k-1）强优先；顶/侧仅作次选（候选已是 shootable）
   for (const f of FACES) { const a = i + f[0], b = j + f[1], kk = k - f[2]; const open = b >= L.H || kk < 0 || a < 0 || a >= L.W || (kk < L.D && st.vox[idx(L, a, b, kk)] === 0); if (!open || kk >= L.D) continue;
-    const dx = from[0] - c[0], dy = from[1] - c[1], dz = from[2] - c[2], sc = (f[0] * dx + f[1] * dy + f[2] * dz) / Math.hypot(dx, dy, dz) + (f[1] ? 0.15 : 0) + (f[2] === 1 ? 0.35 : 0); if (sc > bs) { bs = sc; best = f; } }
-  if (!best) best = [0, 1, 0]; const off = Wd.vs / 2 + S.ballR + 0.02;
+    const dx = from[0] - c[0], dy = from[1] - c[1], dz = from[2] - c[2], sc = (f[0] * dx + f[1] * dy + f[2] * dz) / Math.hypot(dx, dy, dz) + (f[2] === 1 ? 1.2 : 0) + (f[1] ? 0.05 : 0); if (sc > bs) { bs = sc; best = f; } }
+  if (!best) best = [0, 0, 1]; const off = Wd.vs / 2 + S.ballR + 0.02;
   return { p: [c[0] + best[0] * off, c[1] + best[1] * off, c[2] + best[2] * off], nrm: best };
 }
 function ballPath(p0, p1, arc = S.ballArc, ctrl = null) {
@@ -132,16 +133,16 @@ function sphereHitsVox(p, r, skip) { // 球与已占方块（圆角忽略，按�
 }
 function pickTargetLOS(sh, muz) {
   const c = sh.color, cand = [];
-  // 任一面外露的同色未预定方块；选离炮口最近且弹道不穿实心体素的（一发一格）
-  for (const m of st.exp[c]) { if (st.claimed[m]) continue; const p = Wd.vox(m), d = (p[0] - muz[0]) ** 2 + (p[1] - muz[1]) ** 2 * 0.6 + (p[2] - muz[2]) ** 2; cand.push([d, m]); }
+  // 只打正面朝向炮台外露的同色方块（shootableAt：k===0 或 k-1 空）；顶/侧/背 alone 不算；一发一格 + 球体 LOS
+  for (const m of st.exp[c]) { if (!isShootable(L, st, m)) continue; const p = Wd.vox(m), d = (p[0] - muz[0]) ** 2 + (p[1] - muz[1]) ** 2 * 0.6 + (p[2] - muz[2]) ** 2; cand.push([d, m]); }
   if (!cand.length) return null; cand.sort((a, b) => a[0] - b[0]);
   const clear = (path, m) => { const p0 = path(0), p1 = path(0.5), p2 = path(1), len = Math.hypot(p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]) + Math.hypot(p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]), n = Math.max(12, Math.ceil(len / (S.ballR * 0.5))); for (let s = 1; s <= n; s++) if (sphereHitsVox(path(s / n), S.ballR + 0.005, -1)) return false; return true; };
   const top = L.H * Wd.vs;
-  // 平射 / 抛物线落到该体素朝向炮口的最优外露面（hitPoint 偏好正面）
+  // 平射 / 抛物线落到正面（hitPoint 偏好朝向炮口的正面法线）
   for (const arc of [S.ballArc, S.ballArc * 2 + 2, S.ballArc * 4 + 6, -1, -2, -3, -4]) for (let q = 0; q < Math.min(cand.length, 80); q++) { const m = cand[q][1], hp = hitPoint(m, muz), n = hp.nrm;
     const LOB = { '-1': [3, 3], '-2': [10, 1.5], '-3': [10, 5], '-4': [18, 3] }[arc] || [0, 0], hh = top + LOB[0], dd = Wd.vs * LOB[1], ctrl = arc >= 0 ? null : [[muz[0], hh, muz[2]], [hp.p[0] + n[0] * dd, hh, hp.p[2] + n[2] * dd]];
     const path = ballPath(muz, hp.p, arc, ctrl); if (clear(path, m)) return { m, hp, path }; }
-  // 隧道/竖井：剥落后腔内露时，沿法线走出体块再直线飞入（球体 LOS，不穿实心）
+  // 正面已开的浅腔：沿法线走出体块再直线飞入（候选已是 shootable；不穿实心）
   for (let q = 0; q < Math.min(cand.length, 80); q++) { const m = cand[q][1], hp = hitPoint(m, muz), n = hp.nrm; const [i0, j0, k0] = coords(L, m); let a = i0, b = j0, ck = k0, steps = 0, out = false;
     while (steps++ < 80) { a += n[0]; b += n[1]; ck -= n[2]; if (a < 0 || b < 0 || ck < 0 || a >= L.W || b >= L.H || ck >= L.D) { out = true; break; } if (st.vox[idx(L, a, b, ck)]) break; }
     if (!out) continue; const E = [hp.p[0] + n[0] * (steps + 0.5) * Wd.vs, hp.p[1] + n[1] * (steps + 0.5) * Wd.vs, hp.p[2] + n[2] * (steps + 0.5) * Wd.vs];
@@ -188,28 +189,38 @@ function step(t) {
   for (const b of G.balls) {
     if (b.ph === 'fly') {
       const u = clamp01((t - b.t0) / b.dur); b.pos = b.path(u);
-      if (u >= 1) { // 命中：消除方块 + 碎屑 + 弹开
-        const col = L.palette[st.vox[b.m] - 1]; removeVoxel(L, st, b.m); b.sh.inFlight--; G.pops.push({ n: b.m, t0: t, c: st.vox[b.m] || 0, color: col }); if (Math.random() < 0.5) sfx.play('hit', S);
-        const vp = Wd.vox(b.m), dsp = S.debrisSpread, R = Math.random; for (let q = 0; q < S.debrisCount; q++) G.debris.push({ id: ++debSeq, color: col, p: [vp[0] + (R() - 0.5) * 0.55, vp[1] + (R() - 0.5) * 0.55, vp[2] + (R() - 0.5) * 0.55], v: [b.nrm[0] * 2.8 * dsp + (R() - 0.5) * 4.5 * dsp, (2.8 + R() * 5) * dsp, b.nrm[2] * 2.8 * dsp + (R() - 0.5) * 4.5 * dsp], t0: t, s: S.debrisSize * (0.55 + R() * 0.9), rot: R() * 6 }); // 同色果冻碎屑（Math.random，不消耗物理 rnd）
-        const d0 = b.path(0.97), d1 = b.path(1), dir = [d1[0] - d0[0], d1[1] - d0[1], d1[2] - d0[2]], dl = Math.hypot(...dir) || 1, n = b.nrm, dn = (dir[0] * n[0] + dir[1] * n[1] + dir[2] * n[2]) / dl;
-        const ref = [dir[0] / dl - 2 * dn * n[0], dir[1] / dl - 2 * dn * n[1], dir[2] / dl - 2 * dn * n[2]], sp = S.bounceSpeed * (0.7 + 0.6 * rnd()), side = (rnd() - 0.5) * 0.9;
-        b.ph = 'bounce'; b.tb = t; b.vel = [ref[0] * sp + side * sp, Math.abs(ref[1]) * sp * 0.6 + 2.5, ref[2] * sp + 1.5];
+      if (u >= 1) { // 命中：果冻破碎消除 + 同色软糖碎屑；子弹立刻消失（参考：果冻 FX 主导，无长弹开珠链）
+        const col = L.palette[st.vox[b.m] - 1]; removeVoxel(L, st, b.m); b.sh.inFlight--; G.pops.push({ n: b.m, t0: t, c: st.vox[b.m] || 0, color: col }); if (Math.random() < 0.55) sfx.play('hit', S);
+        const vp = Wd.vox(b.m), dsp = S.debrisSpread, R = Math.random, nrm = b.nrm;
+        const nDeb = S.debrisCount | 0;
+        for (let q = 0; q < nDeb; q++) {
+          const big = q < nDeb * 0.35, ang = R() * Math.PI * 2, up = (big ? 3.2 : 2.2) + R() * (big ? 5.5 : 4);
+          const side = (0.8 + R() * 2.2) * dsp, push = (2.2 + R() * 3.5) * dsp;
+          G.debris.push({
+            id: ++debSeq, color: col,
+            p: [vp[0] + nrm[0] * 0.15 + (R() - 0.5) * 0.4, vp[1] + (R() - 0.5) * 0.4, vp[2] + nrm[2] * 0.15 + (R() - 0.5) * 0.4],
+            v: [nrm[0] * push + Math.cos(ang) * side, up * dsp, nrm[2] * push + Math.sin(ang) * side],
+            t0: t, s: S.debrisSize * (big ? 0.85 + R() * 0.7 : 0.4 + R() * 0.55), rot: R() * 6, squash: big ? 1.15 : 1,
+          });
+        }
+        // 极短白闪后消失（~70ms），不进入长 bounce
+        b.ph = 'flash'; b.tb = t; b.flashMs = 70;
       }
+    } else if (b.ph === 'flash') {
+      if (t - b.tb >= (b.flashMs || 70)) b.ph = 'gone';
     } else if (b.ph === 'bounce') {
+      // 兼容旧回放/设置：若仍有 bounce 则短寿命淡出
       const sub = 4, h = dt / sub;
       for (let q = 0; q < sub; q++) {
         b.vel[1] -= g * h; const np = [b.pos[0] + b.vel[0] * h, b.pos[1] + b.vel[1] * h, b.pos[2] + b.vel[2] * h];
-        const hv = sphereHitsVox(np, r, -1); if (hv) { // 撞到方块：沿穿入方向反弹
+        const hv = sphereHitsVox(np, r, -1); if (hv) {
           const d = [np[0] - hv.q[0], np[1] - hv.q[1], np[2] - hv.q[2]], dl = Math.hypot(...d) || 1, nn = d.map(x => x / dl), vn = b.vel[0] * nn[0] + b.vel[1] * nn[1] + b.vel[2] * nn[2];
           if (vn < 0) for (let a = 0; a < 3; a++) b.vel[a] -= 1.5 * vn * nn[a]; continue; }
         const onBase = np[0] > Wd.base.x0 && np[0] < Wd.base.x1 && np[2] > Wd.base.z0 && np[2] < Wd.base.z1, floor = (onBase ? Wd.base.y1 : 0) + r;
         if (np[1] < floor && b.vel[1] < 0) { np[1] = floor; b.vel[1] *= -0.45; b.vel[0] *= 0.8; b.vel[2] *= 0.8; }
-        for (const sh of G.shooters) { if (sh.state === 'gone') continue; const w = shooterWorld(sh, t); if (!w) continue; const B = shooterBox(), ws = w.s || 1, ex = Math.max(-B.x0, B.x1) * ws + r, ez = Math.max(-B.z0, B.z1) * ws + r, hy = B.y1 * ws * (w.sy ?? 1) + r; const by0 = w.y + B.y0 * ws - r; if (Math.abs(np[0] - w.x) < ex && Math.abs(np[2] - w.z) < ez && np[1] < w.y + hy && np[1] > by0) { // 球在炮台包围盒内：沿最浅方向推出
-            const pu = w.y + hy - np[1], pd = np[1] - by0, px = ex - Math.abs(np[0] - w.x), pz = ez - Math.abs(np[2] - w.z), mn = Math.min(pu, pd, px, pz);
-            if (mn === pu) { np[1] = w.y + hy; if (b.vel[1] < 0) b.vel[1] *= -0.4; } else if (mn === px) { const sg = Math.sign(np[0] - w.x) || 1; np[0] = w.x + sg * ex; b.vel[0] = sg * Math.abs(b.vel[0]) * 0.5; } else if (mn === pz) { const sg = Math.sign(np[2] - w.z) || 1; np[2] = w.z + sg * ez; b.vel[2] = sg * Math.abs(b.vel[2]) * 0.5; } else { np[1] = by0; if (b.vel[1] > 0) b.vel[1] = 0; } } }
         b.pos = np;
       }
-      if (t - b.tb > S.ballLife) b.ph = 'gone';
+      if (t - b.tb > Math.min(220, S.ballLife)) b.ph = 'gone';
     }
   }
   G.balls = G.balls.filter(b => b.ph !== 'gone');
@@ -240,8 +251,8 @@ function scene(t) {
     const wy = w.y + (w.bobY || 0), ws = w.s * pr, lp = Wd.proj(w.x, wy + SH.h * 1.18 * ws * (w.sy ?? 1), w.z + 0.1);
     at3('shooter_' + String(sh.id + 1).padStart(3, '0'), 'shooter_' + L.palette[sh.color], [w.x, wy, w.z], ws, undefined, { num: sh.left, numOp: front ? 1 : S.numBackOpacity, wsy: w.sy ?? 1, lx: lp[0], ly: lp[1], lsx: labPx(lp, w, ws), bodyYaw: w.yaw || 0, turretYaw: w.turretYaw || 0 });
   }
-  for (const b of G.balls) { const life = b.ph === 'bounce' ? clamp01((S.ballLife - (t - b.tb)) / 200) : 1; at3('ball_' + b.id, 'ball', b.pos, life); }
-  for (const d of G.debris) { const p = clamp01((t - d.t0) / S.debrisLife); at3('debris_' + d.id, 'debris_' + d.color, d.p, d.s * (1 - p), undefined, { rx: d.rot, ry: d.rot * 0.7 }); }
+  for (const b of G.balls) { let life = 1; if (b.ph === 'flash') life = clamp01(1 - (t - b.tb) / (b.flashMs || 70)) * 1.35; else if (b.ph === 'bounce') life = clamp01((Math.min(220, S.ballLife) - (t - b.tb)) / 120); at3('ball_' + b.id, 'ball', b.pos, life); }
+  for (const d of G.debris) { const p = clamp01((t - d.t0) / S.debrisLife), fade = 1 - p * p, sq = d.squash || 1; at3('debris_' + d.id, 'debris_' + d.color, d.p, d.s * fade, undefined, { rx: d.rot, ry: d.rot * 0.7, wsx: sq, wsy: 1 / sq, wsz: sq }); }
   if (S.discShow) add('disclaimer', 'disclaimer', 0, 0, { z: 90 });
   if (finishedAt && t - finishedAt > 300) add('result_win', 'result_win', 0, 0, { z: 92, op: clamp01((t - finishedAt - 300) / 300) });
   if (failedAt) add('result_lose', 'result_lose', 0, 0, { z: 92, op: clamp01((t - failedAt) / 300) });
@@ -264,11 +275,15 @@ function voxGroups(t) {
     const c = L.palette.indexOf(p.color); if (c < 0) continue;
     const u = clamp01((t - p.t0) / Math.max(1, S.popDur)), j = S.jellyPop ?? 1;
     let sx, sy, sz;
-    if (u < 0.32) { // 命中先压扁（果冻挤压）
-      const k = Math.sin(Math.PI * (u / 0.32)); sy = 1 - 0.42 * j * k; sx = sz = 1 + 0.28 * j * k;
-    } else { // 再拉长弹开并缩小消失
-      const k = (u - 0.32) / 0.68, fade = Math.max(0.001, 1 - easeOut(k)), stretch = Math.sin(Math.PI * Math.min(1, k * 1.15));
-      sy = (1 + 0.55 * j * stretch) * fade; sx = sz = (1 - 0.2 * j * stretch) * fade;
+    if (u < 0.28) { // 命中先压扁（果冻挤压）
+      const k = Math.sin(Math.PI * (u / 0.28)); sy = 1 - 0.55 * j * k; sx = sz = 1 + 0.38 * j * k;
+    } else if (u < 0.55) { // 回弹拉长
+      const k = (u - 0.28) / 0.27, stretch = Math.sin(Math.PI * k);
+      sy = 1 + 0.7 * j * stretch; sx = sz = 1 - 0.28 * j * stretch;
+    } else { // 碎裂缩小消失
+      const k = (u - 0.55) / 0.45, fade = Math.max(0.001, 1 - easeOut(k));
+      const wobble = 1 + 0.12 * j * Math.sin(k * Math.PI * 3);
+      sy = (1.15 * wobble) * fade; sx = sz = (0.85 / wobble) * fade;
     }
     gr[c].push([p.n, sx, sy, sz]);
   }

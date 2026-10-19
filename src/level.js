@@ -1,7 +1,7 @@
 // 方块射击：体素关卡 + 规则（纯逻辑，无渲染）。参考视频逐帧分析见 ref/ANALYSIS.md
 // 坐标：i = x 列（0..W-1，左→右），j = 层（0..H-1，下→上），k = 深度（0 = 正面/最靠近炮台，D-1 = 最远）
-// 规则（参考核实）：点击某列队首炮台 → 跳到最左空槽位（共 5 个）；槽位里的炮台只打“同色且任一面外露”的方块
-// （外露 = 顶/前/左/右/背腔；每发只打一格、不 cascading），每发一颗小球，弹药计数 −1，命中即消除；弹药打光 → 炮台离场、槽位空出；暂时没有可打目标 → 原地等待。
+// 规则（参考核实）：点击某列队首炮台 → 跳到最左空槽位（共 5 个）；槽位里的炮台只打“同色且朝向炮台正面外露”的方块
+// （可打 = k===0 或 (i,j,k-1) 空；顶/侧/背腔仅用于渲染外露面，不算射击目标；每发只打一格、不 cascading），每发一颗小球，弹药计数 −1，命中即消除；弹药打光 → 炮台离场、槽位空出；暂时没有可打目标 → 原地等待。
 // 胜利：方块全部消除。失败（参考未出现，按同类玩法补）：5 个槽位全满且没有任何炮台能射击、也没有飞行中的球。
 export const COLORS = ['purple', 'green', 'black', 'yellow', 'red', 'blue', 'orange', 'pink'];
 export const SLOTS = 5, COLS = 6;
@@ -29,7 +29,20 @@ export function exposedAt(L, vox, i, j, k) {
   const { W, H, D } = L, e = (a, b, c) => vox[idx(L, a, b, c)] === 0;
   return j === H - 1 || e(i, j + 1, k) || k === 0 || e(i, j, k - 1) || i === 0 || e(i - 1, j, k) || i === W - 1 || e(i + 1, j, k) || (k < D - 1 && e(i, j, k + 1));
 }
-// 状态：外露集合按颜色维护（增量更新）
+// 可打目标：仅「朝向炮台/槽位」的正面外露（k===0 或 k-1 为空）。顶面/侧面/背腔内露只用于渲染（exposedAt），不算射击目标。
+export function shootableAt(L, vox, i, j, k) {
+  return k === 0 || vox[idx(L, i, j, k - 1)] === 0;
+}
+export function isShootable(L, st, m) {
+  if (!st.vox[m] || st.claimed[m]) return false;
+  const [i, j, k] = coords(L, m);
+  return shootableAt(L, st.vox, i, j, k);
+}
+/** @deprecated alias — use shootableAt */
+export const frontExposedAt = shootableAt;
+/** @deprecated alias — use isShootable */
+export const isFrontTarget = isShootable;
+// 状态：外露集合按颜色维护（增量更新；meshing 用全 exposedAt，射击另用 shootableAt）
 export function initState(L) {
   const st = { vox: L.vox.slice(), exp: L.palette.map(() => new Set()), left: L.palette.map(() => 0), claimed: new Uint8Array(L.vox.length), total: 0 };
   const { W, H, D } = L;
@@ -45,20 +58,21 @@ export function removeVoxel(L, st, n) {
   }
   return true;
 }
-// 可打目标数 = 任一面外露且未被飞行中的球预定
-export function availCount(L, st, c, outstanding = 0) { let n = 0; for (const m of st.exp[c]) if (!st.claimed[m]) n++; return n - outstanding; }
-// 选目标：外露、同色、未预定，离炮口最近（世界坐标；一发一格，优先近处）
+// 可打目标数 = 正面朝向炮台外露且未被飞行中的球预定（不含仅顶/侧/背外露）
+export function availCount(L, st, c, outstanding = 0) { let n = 0; for (const m of st.exp[c]) if (isShootable(L, st, m)) n++; return n - outstanding; }
+// 选目标：正面可打、同色、未预定；稳定序 (k,j,i) 优先浅层，再近炮口（生成器与模拟一致）
 export function pickTarget(L, st, c, wx, wz, wy = 0, worldOf) {
   let best = -1, bd = 1e18;
   for (const m of st.exp[c]) {
-    if (st.claimed[m]) continue;
-    const p = worldOf(m), d = (p[0] - wx) ** 2 + (p[1] - wy) ** 2 * 0.6 + (p[2] - wz) ** 2;
+    if (!isShootable(L, st, m)) continue;
+    const [i, j, k] = coords(L, m), p = worldOf(m);
+    const d = k * 1e9 + j * 1e5 + i * 100 + ((p[0] - wx) ** 2 + (p[1] - wy) ** 2 * 0.6 + (p[2] - wz) ** 2) * 1e-3;
     if (d < bd) { bd = d; best = m; }
   }
   return best;
 }
 export const roundAmmo = (a, step = 10) => a >= step ? Math.floor(a / step) * step : a;
-// 生成炮台序列（保证可解）：每个新炮台的弹药 ≤ 该色当前“外露且未被预支”的方块数——外露只增不减。
+// 生成炮台序列（保证可解）：每个新炮台的弹药 ≤ 该色当前“正面可打且未被预支”的方块数——正面外露只增不减。
 export function planShooters(L, o = {}) {
   const maxAmmo = o.maxAmmo || 200, K = o.parallel || 3, step = o.ammoStep || 10, st = initState(L), worldOf = o.worldOf || (m => { const [i, j, k] = coords(L, m); return [i, j, -k]; });
   const plan = [], active = [], outst = L.palette.map(() => 0); let guard = 0;
@@ -105,7 +119,7 @@ export function randomVolume(o = {}) {
   return L;
 }
 // 参考关：6 列单色队列（参考队首 黑/绿/紫/黄/绿/黑，整列同色），全部 200 弹药；数量 = 该色所需 + 补满可见行。
-// 多出的弹药：该色方块全部消除后炮台直接离场（规则见 ANALYSIS.md）；自动通关按“外露可打数最多的颜色”动态点击。
+// 多出的弹药：该色方块全部消除后炮台直接离场（规则见 ANALYSIS.md）；自动通关按“正面可打数最多的颜色”动态点击。
 export function refQueues(vol, o = {}) {
   const prefs = o.prefs || ['black', 'green', 'purple', 'yellow', 'green', 'black'], ammo = o.maxAmmo || 200, minRows = o.minRows || 18, Q = prefs.map(() => []);
   const need = vol.palette.map((p, c) => Math.ceil(vol.vox.reduce((a, v) => a + (v === c + 1 ? 1 : 0), 0) / ammo));
@@ -137,7 +151,7 @@ export function simulate(L, o = {}) {
   return { ok: st.total === 0, taps, shots };
 }
 
-// 参考关（动态）：每次点“外露未预定数最多”的颜色的队首；该色清空后炮台离场
+// 参考关（动态）：每次点“正面可打未预定数最多”的颜色的队首；该色清空后炮台离场
 export function simulateDynamic(L, o = {}) {
   const st = initState(L), K = o.parallel || 3, fronts = L.queues.map(() => 0), slots = new Array(SLOTS).fill(null), worldOf = o.worldOf || (m => { const [i, j, k] = coords(L, m); return [i, j, -k]; });
   let taps = 0, shots = 0, ticks = 0;
