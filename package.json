@@ -1,6 +1,6 @@
 {
   "name": "block-shooter-tool",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "\u65b9\u5757\u5c04\u51fb\u6838\u73a9\u5de5\u5177\uff08\u5355\u6587\u4ef6\u79bb\u7ebf\u7248\uff09",
   "type": "module",
   "scripts": {

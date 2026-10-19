@@ -229,7 +229,7 @@ function step(t) {
   for (const d of G.debris) { d.v[1] -= g * dt; d.p = [d.p[0] + d.v[0] * dt, d.p[1] + d.v[1] * dt, d.p[2] + d.v[2] * dt]; d.rot += dt * 8; }
   G.debris = G.debris.filter(d => t - d.t0 < S.debrisLife);
   G.pops = G.pops.filter(p => t - p.t0 < S.popDur);
-  const nDur = Math.max(1, S.neighborDur ?? 260);
+  const nDur = Math.max(1, S.neighborDur ?? 180);
   G.wobbles = (G.wobbles || []).filter(w => t - w.t0 < nDur);
   // 胜负
   if (!finishedAt && st.total === 0 && !G.balls.some(b => b.ph === 'fly')) { finishedAt = t; onFinish(); }
@@ -265,22 +265,31 @@ function scene(t) {
   out.sort((a, b) => a.z - b.z);
   return out;
 }
-// 命中邻块径向挤动：6 邻 + 对角环（半径 neighborRadius），视觉 only
+// 命中邻块径向挤动（可选视觉）：默认强度 0=关，对齐参考「邻块不位移」。
+// 规则：每格最多 1 条 wobble（新命中覆盖旧）、总数封顶；结束硬回 identity，永不改 rest。
 function impulseNeighbors(hitN, t) {
-  const radius = S.neighborRadius ?? 1.75, impulse = S.neighborImpulse ?? 0.55;
+  const radius = S.neighborRadius ?? 1.5, impulse = S.neighborImpulse ?? 0;
   if (impulse <= 0 || radius <= 0) return;
   const [hi, hj, hk] = coords(L, hitN), rCeil = Math.ceil(radius + 1e-6);
   if (!G.wobbles) G.wobbles = [];
+  const byN = new Map();
+  for (const w of G.wobbles) byN.set(w.n, w);
+  const maxAlive = 48;
   for (let di = -rCeil; di <= rCeil; di++) for (let dj = -rCeil; dj <= rCeil; dj++) for (let dk = -rCeil; dk <= rCeil; dk++) {
     if (!di && !dj && !dk) continue;
     const dist = Math.hypot(di, dj, dk); if (dist > radius + 1e-6) continue;
     const i = hi + di, j = hj + dj, k = hk + dk;
     if (i < 0 || j < 0 || k < 0 || i >= L.W || j >= L.H || k >= L.D) continue;
     const m = idx(L, i, j, k); if (!st.vox[m]) continue;
-    // 6 邻满强度，对角/更远按半径衰减；世界径向 x~i y~j z~-k
     const fall = dist <= 1.01 ? 1 : Math.max(0, 1 - (dist - 1) / Math.max(0.05, radius - 1));
-    G.wobbles.push({ n: m, t0: t, rx: di, ry: dj, rz: -dk, amp: impulse * fall });
+    const amp = impulse * fall;
+    const prev = byN.get(m);
+    // 同格只保留更强或更新的一条，禁止叠乘
+    if (prev && prev.amp >= amp && t - prev.t0 < 40) continue;
+    byN.set(m, { n: m, t0: t, rx: di, ry: dj, rz: -dk, amp });
   }
+  // 按 amp 降序截断，避免连射撑爆
+  G.wobbles = [...byN.values()].sort((a, b) => b.amp - a.amp).slice(0, maxAlive);
 }
 // 体素渲染列表：每色 [格子号, sx, sy?, sz?, ox?, oy?, oz?]（外露 + 果冻消除 + 邻块挤动）
 function voxGroups(t) {
@@ -292,29 +301,32 @@ function voxGroups(t) {
     voxGroups.c = { st, ver: st.ver || 0, base };
   }
   const gr = voxGroups.c.base.map(l => l.slice());
-  // 邻块果冻挤动：径向位移 + 挤压/鼓包缩放，叠多个命中
-  const nDur = Math.max(1, S.neighborDur ?? 260), vs = Wd.vs;
-  if (G.wobbles && G.wobbles.length) {
-    const acc = new Map(); // n -> [sx,sy,sz,ox,oy,oz]
+  // 邻块挤动（默认关）：纯加性临时 mesh 偏移；无 active wobble 时 rest = worldOf + scale(1,1,1)
+  const nDur = Math.max(1, S.neighborDur ?? 180), vs = Wd.vs;
+  if (G.wobbles && G.wobbles.length && (S.neighborImpulse ?? 0) > 0) {
+    const acc = new Map(); // n -> [sx,sy,sz,ox,oy,oz] 每格最多一条
     for (const w of G.wobbles) {
       const u = clamp01((t - w.t0) / nDur);
-      // 快冲出再缓回（~20% 达峰，其余回弹）
-      const env = u < 0.22 ? Math.sin((Math.PI / 2) * (u / 0.22)) : Math.cos((Math.PI / 2) * ((u - 0.22) / 0.78));
+      if (u >= 1) continue; // 结束：不写入 → 硬回 identity
+      // 短峰(~12%) + 平滑回 0，env(1)=0
+      const env = u < 0.12 ? Math.sin((Math.PI / 2) * (u / 0.12)) : Math.cos((Math.PI / 2) * ((u - 0.12) / 0.88));
+      if (env <= 1e-4) continue;
       const len = Math.hypot(w.rx, w.ry, w.rz) || 1;
       const nx = w.rx / len, ny = w.ry / len, nz = w.rz / len;
       const a = w.amp * env;
-      const push = a * vs * 0.85; // 世界位移（参考：邻块挤出格缝）
-      const bulge = a * 0.72; // 非均匀缩放：沿径向鼓、切向略压
-      let e = acc.get(w.n); if (!e) { e = [1, 1, 1, 0, 0, 0]; acc.set(w.n, e); }
-      e[3] += nx * push; e[4] += ny * push; e[5] += nz * push;
-      // 轴向分解鼓包（近似 soft-body）
-      e[0] *= 1 + bulge * (Math.abs(nx) * 1.15 - (1 - Math.abs(nx)) * 0.28);
-      e[1] *= 1 + bulge * (Math.abs(ny) * 1.15 - (1 - Math.abs(ny)) * 0.28);
-      e[2] *= 1 + bulge * (Math.abs(nz) * 1.15 - (1 - Math.abs(nz)) * 0.28);
+      // 极弱位移（参考邻块几乎不动）；无乘性缩放叠乘
+      const push = a * vs * 0.22;
+      const bulge = a * 0.12;
+      acc.set(w.n, [
+        1 + bulge * (Math.abs(nx) - (1 - Math.abs(nx)) * 0.35),
+        1 + bulge * (Math.abs(ny) - (1 - Math.abs(ny)) * 0.35),
+        1 + bulge * (Math.abs(nz) - (1 - Math.abs(nz)) * 0.35),
+        nx * push, ny * push, nz * push,
+      ]);
     }
     for (const list of gr) for (let q = 0; q < list.length; q++) {
-      const row = list[q], e = acc.get(row[0]); if (!e) continue;
-      list[q] = [row[0], (row[1] ?? 1) * e[0], (row[2] ?? row[1] ?? 1) * e[1], (row[3] ?? row[1] ?? 1) * e[2], e[3], e[4], e[5]];
+      const row = list[q], e = acc.get(row[0]); if (!e) continue; // 无条目 = 精确 rest [n,1]
+      list[q] = [row[0], e[0], e[1], e[2], e[3], e[4], e[5]];
     }
   }
   for (const p of G.pops) {

@@ -1,3 +1,9 @@
+## v1.0.6（2026-10-19）
+- **层间对齐 / 角落凸起修复**：v1.0.5 `neighborImpulse` 连射叠乘导致 idle 墙面波浪与左下凸起；默认强度改为 **0**（对齐参考：邻块不位移），存活体素 rest = `worldOf(i,j,k)` + scale(1,1,1)
+- 若手动开启邻块 FX：每格最多 1 条 wobble、总数≤48、短峰后硬回 identity，禁止残差
+- 保留 shootableAt / 本格果冻消除 / 碎屑 / bob / 材质；`SETTINGS_VERSION` 6
+- `test:logic` / `test:clip` PASS；Pages 发布
+
 ## v1.0.5（2026-10-19）
 - **邻块果冻挤动**：命中消除时半径内邻块径向位移 + 挤压鼓包（`neighborImpulse`/`neighborRadius`/`neighborDur`），~150–300ms 回弹；仅视觉，不改 `shootableAt`
 - 保留命中格果冻碎裂 + 球 flash 消失；`SETTINGS_VERSION` 5
