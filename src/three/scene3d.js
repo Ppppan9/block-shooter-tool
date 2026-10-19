@@ -17,7 +17,7 @@ export function geos(S) {
 const matCache = new Map();
 export function mat(S, hex, o = {}) { const key = hex + JSON.stringify(o) + S.mat3dRough + '|g' + (o.glow || 0); if (!matCache.has(key)) { const m = new THREE.MeshStandardMaterial({ color: new THREE.Color(hex), roughness: o.rough ?? S.mat3dRough, metalness: 0, ...o.extra }); if (o.glow) { m.emissive = new THREE.Color(hex); m.emissiveIntensity = o.glow; } m.name = o.name || ('mat_' + hex.slice(1)); matCache.set(key, m); } return matCache.get(key); }
 const outlineMat = new THREE.MeshBasicMaterial({ color: 0x121018, side: THREE.BackSide }); outlineMat.name = 'mat_outline';
-function withOutline(mesh, S) { if (!S.outline3d) return mesh; const o = new THREE.Mesh(mesh.geometry, outlineMat); o.name = mesh.name + '_outline'; o.scale.setScalar(1 + S.outline3d / Math.max(0.3, Math.min(mesh.scale.x, mesh.scale.y, mesh.scale.z) || 1) * 0.06); mesh.add(o); return mesh; }
+function withOutline(mesh, S) { if (!S.outline3d) return mesh; const o = new THREE.Mesh(mesh.geometry, outlineMat); o.name = mesh.name + '_outline'; o.scale.setScalar(1 + S.outline3d / Math.max(0.3, Math.min(mesh.scale.x, mesh.scale.y, mesh.scale.z) || 1) * 0.09); mesh.add(o); return mesh; }
 const shade = (hex, f) => { const c = new THREE.Color(hex); c.multiplyScalar(f); return '#' + c.getHexString(); };
 // 数字贴图（白字 + 深色描边，参考）
 const numTex = new Map();
@@ -28,22 +28,32 @@ export function makeShooter(S, color, Wd) {
   const hex = colorHex(S, color), dark = shade(hex, 0.78), { w, d, h } = Wd.SH, G = new THREE.Group(); G.name = 'shooter_' + color;
   const body = new THREE.Group(); body.name = 'body'; const upper = new THREE.Group(); upper.name = 'upper';
   const rb = (W2, H2, D2, r) => new RoundedBoxGeometry(W2, H2, D2, 2, r);
+  const tankR = S.tankRough ?? S.mat3dRough ?? 0.72; // 半哑光玩具塑料
   // 参考：下半身(履带+车身)与上半身(炮塔+炮管+数字)可独立 yaw —— 射击时两者都会转向目标
   const trackG = rb(w * 0.24, h * 0.46, d, 0.2);
-  for (const sx of [-1, 1]) { const t = new THREE.Mesh(trackG, mat(S, dark)); t.name = sx < 0 ? 'track_L' : 'track_R'; t.position.set(sx * w * 0.38, h * 0.23, 0); body.add(withOutline(t, S)); }
-  const hull = new THREE.Mesh(rb(w * 0.66, h * 0.5, d * 0.92, 0.22), mat(S, hex)); hull.name = 'hull'; hull.position.set(0, h * 0.42, 0.0); body.add(withOutline(hull, S));
-  const tur = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 14, 0, Math.PI * 2, 0, Math.PI / 2), mat(S, hex)); tur.name = 'turret'; tur.scale.set(w * 0.36, h * 0.5, d * 0.4); tur.position.set(0, h * 0.62, 0.08); upper.add(withOutline(tur, S));
-  const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.3, d * 0.42, 16), mat(S, hex)); bar.name = 'barrel'; bar.rotation.x = -Math.PI / 2 + 0.6; bar.position.set(0, h * 0.86, -d * 0.25); upper.add(withOutline(bar, S));
+  for (const sx of [-1, 1]) { const t = new THREE.Mesh(trackG, mat(S, dark, { rough: tankR })); t.name = sx < 0 ? 'track_L' : 'track_R'; t.position.set(sx * w * 0.38, h * 0.23, 0); body.add(withOutline(t, S)); }
+  const hull = new THREE.Mesh(rb(w * 0.66, h * 0.5, d * 0.92, 0.22), mat(S, hex, { rough: tankR })); hull.name = 'hull'; hull.position.set(0, h * 0.42, 0.0); body.add(withOutline(hull, S));
+  const tur = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 14, 0, Math.PI * 2, 0, Math.PI / 2), mat(S, hex, { rough: tankR })); tur.name = 'turret'; tur.scale.set(w * 0.36, h * 0.5, d * 0.4); tur.position.set(0, h * 0.62, 0.08); upper.add(withOutline(tur, S));
+  const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.3, d * 0.42, 16), mat(S, hex, { rough: tankR })); bar.name = 'barrel'; bar.rotation.x = -Math.PI / 2 + 0.6; bar.position.set(0, h * 0.86, -d * 0.25); upper.add(withOutline(bar, S));
   const lab = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 0.95), new THREE.MeshBasicMaterial({ map: numberTexture(200), transparent: true, depthWrite: false, depthTest: false })); lab.name = 'label'; lab.renderOrder = 5; lab.position.set(0, h * 1.18, 0.1); upper.add(lab);
   G.add(body, upper); G.userData.body = body; G.userData.upper = upper; G.userData.label = lab; G.userData.color = color;
   return G;
 }
-// 白球 + 软光晕（参考珠链略大/更亮）
+// 白球：半透明软光泽球体 + 淡 rim/光晕（参考珠链，非刺眼自发光盘）
 export function makeBall(S) {
   const g = new THREE.Group(); g.name = 'ball';
-  const core = new THREE.Mesh(geos(S).ball, mat(S, '#ffffff', { name: 'mat_ball', rough: 0.22, glow: S.ballGlow || 0 })); core.name = 'ball_core'; g.add(core);
+  const glow = S.ballGlow || 0;
+  const coreMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff, roughness: 0.16, metalness: 0.05,
+    transparent: true, opacity: 0.9, depthWrite: true,
+    emissive: new THREE.Color(0xffffff), emissiveIntensity: glow * 0.45,
+  }); coreMat.name = 'mat_ball';
+  const core = new THREE.Mesh(geos(S).ball, coreMat); core.name = 'ball_core'; g.add(core);
+  // 内层略亮的高光核（软 rim）
+  const rim = new THREE.Mesh(geos(S).ball, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.22 + glow * 0.12, depthWrite: false, toneMapped: false }));
+  rim.name = 'ball_rim'; rim.scale.setScalar(0.72); rim.renderOrder = 1; g.add(rim);
   if (S.ballHalo > 1 && S.ballHaloOp > 0) {
-    const halo = new THREE.Mesh(geos(S).ball, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: S.ballHaloOp, depthWrite: false, toneMapped: false }));
+    const halo = new THREE.Mesh(geos(S).ball, new THREE.MeshBasicMaterial({ color: 0xfff8ff, transparent: true, opacity: S.ballHaloOp, depthWrite: false, toneMapped: false }));
     halo.name = 'ball_halo'; halo.scale.setScalar(S.ballHalo); halo.renderOrder = 2; g.add(halo);
   }
   return g;
@@ -62,15 +72,15 @@ export function create3D(opt = {}) {
     // 槽位：白色圆盘
     slotMeshes = Wd.slots.map(([x, z], i) => { const m = new THREE.Mesh(geos(S).slot, mat(S, S.slotColor, { name: 'mat_slot', rough: 0.5 })); m.name = 'slot_' + (i + 1); m.scale.set(S.slotR, 1, S.slotR * 0.92); m.position.set(x, 0.04, z); statics.add(m); return m; });
     // 体素：每色一个 InstancedMesh（只放外露 / 正在消除的方块）
-    voxMesh = L.palette.map((p, c) => { const m = new THREE.InstancedMesh(geos(S).vox, mat(S, colorHex(S, p), { name: 'mat_vox_' + p }), 16); m.name = 'voxels_' + p; m.count = 0; m.frustumCulled = false; scene.add(m); return m; });
+    voxMesh = L.palette.map((p, c) => { const m = new THREE.InstancedMesh(geos(S).vox, mat(S, colorHex(S, p), { name: 'mat_vox_' + p, rough: S.voxRough ?? 0.36 }), 16); m.name = 'voxels_' + p; m.count = 0; m.frustumCulled = false; scene.add(m); return m; });
     cap = 0;
     if (opt.exportMode) voxMesh.forEach(m => scene.remove(m));
   }
   const M4 = new THREE.Matrix4(), Q = new THREE.Quaternion(), V3 = new THREE.Vector3(), SC = new THREE.Vector3();
-  // frame = { vox: [ [n, scale] ... ] 按颜色分组的外露方块列表, items }
+  // frame = { vox: [ [n, sx, sy?, sz?] ... ] 按颜色分组；消除时可非均匀果冻缩放 }
   function setVoxels(groups) {
     groups.forEach((list, c) => { let m = voxMesh[c]; if (list.length > m.instanceMatrix.count) { const nm = new THREE.InstancedMesh(m.geometry, m.material, Math.ceil(list.length * 1.3) + 16); nm.name = m.name; nm.frustumCulled = false; scene.remove(m); m.dispose(); scene.add(nm); voxMesh[c] = m = nm; }
-      for (let q = 0; q < list.length; q++) { const [n, s] = list[q], p = Wd.vox(n); V3.set(p[0], p[1], p[2]); SC.setScalar(Wd.vs * s); M4.compose(V3, Q.identity(), SC); m.setMatrixAt(q, M4); }
+      for (let q = 0; q < list.length; q++) { const row = list[q], n = row[0], sx = row[1] ?? 1, sy = row[2] ?? sx, sz = row[3] ?? sx, p = Wd.vox(n); V3.set(p[0], p[1], p[2]); SC.set(Wd.vs * sx, Wd.vs * sy, Wd.vs * sz); M4.compose(V3, Q.identity(), SC); m.setMatrixAt(q, M4); }
       m.count = list.length; m.instanceMatrix.needsUpdate = true; });
   }
   function getObj(it) {

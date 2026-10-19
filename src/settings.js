@@ -1,6 +1,6 @@
 // 设置定义：所有可调参数。版本号 + 迁移（通用分组、键名、标签与麻将 / 打螺丝 / 咖啡工具一致，见 ref/TOOLKIT_STANDARD.md）
 import { DEFAULT_HAND } from './default_hand.js';
-export const SETTINGS_VERSION = 2;
+export const SETTINGS_VERSION = 3;
 export const STORE_KEY = 'blockShooterTool.settings';
 export const APP_ID = 'block-shooter-tool';
 // [key, 标签, 类型, 默认, min, max, step]  类型: range/color/bool/select/text/file/button
@@ -49,12 +49,12 @@ export const GROUPS = [
     ['slotR', '槽位半径(格)', 'range', 1.2, 0.3, 1.4, 0.01],
     ['voxGap', '方块间缝(×格)', 'range', 0.04, 0, 0.3, 0.005],
     ['voxRound', '方块圆角(×格)', 'range', 0.16, 0, 0.45, 0.01],
-    ['outline3d', '卡通描边粗细(炮台)', 'range', 0.6, 0, 2, 0.05],
+    ['outline3d', '卡通描边粗细(炮台，参考玩具描边)', 'range', 0.95, 0, 2, 0.05],
     ['numBackOpacity', '后排炮台数字不透明度(参考≈0.45)', 'range', 0.45, 0, 1, 0.01],
     ['ballR', '小球半径(格；观感靠自发光+光晕略放大)', 'range', 0.3, 0.1, 0.8, 0.01],
-    ['ballGlow', '小球自发光强度(参考软光晕)', 'range', 0.55, 0, 2, 0.05],
-    ['ballHalo', '小球光晕相对半径', 'range', 1.55, 1, 2.5, 0.05],
-    ['ballHaloOp', '小球光晕不透明度', 'range', 0.32, 0, 0.8, 0.01],
+    ['ballGlow', '小球自发光强度(软光泽，勿过曝)', 'range', 0.28, 0, 2, 0.05],
+    ['ballHalo', '小球光晕相对半径', 'range', 1.65, 1, 2.5, 0.05],
+    ['ballHaloOp', '小球光晕不透明度', 'range', 0.2, 0, 0.8, 0.01],
   ]],
   ['3D 渲染（three.js，离线打包）', [
     ['cam3dFov', '相机视角 FOV(°，按参考拟合≈3.35)', 'range', 3.35, 1, 60, 0.05],
@@ -64,11 +64,13 @@ export const GROUPS = [
     ['cam3dTX', '相机目标 X', 'range', -0.737, -100, 100, 0.001],
     ['cam3dTY', '相机目标 Y', 'range', 11.987, -100, 100, 0.001],
     ['cam3dTZ', '相机目标 Z', 'range', 7.503, -100, 100, 0.001],
-    ['light3dSun', '主光强度', 'range', 2.1, 0, 6, 0.05],
-    ['light3dAmbient', '环境光强度', 'range', 1.25, 0, 4, 0.05],
+    ['light3dSun', '主光强度(顶光勾方块高光)', 'range', 2.35, 0, 6, 0.05],
+    ['light3dAmbient', '环境光强度', 'range', 1.15, 0, 4, 0.05],
     ['light3dAzim', '主光方位角(°)', 'range', 330, 0, 360, 1],
-    ['light3dElev', '主光仰角(°)', 'range', 62, 5, 90, 1],
-    ['mat3dRough', '材质粗糙度(参考哑光)', 'range', 0.8, 0, 1, 0.01],
+    ['light3dElev', '主光仰角(°)', 'range', 68, 5, 90, 1],
+    ['mat3dRough', '默认材质粗糙度(回退)', 'range', 0.72, 0, 1, 0.01],
+    ['voxRough', '方块粗糙度(果冻/亮塑料)', 'range', 0.36, 0, 1, 0.01],
+    ['tankRough', '炮台粗糙度(半哑光玩具塑料)', 'range', 0.72, 0, 1, 0.01],
   ]],
   ['玩法与动画', [
     ['fireRate', '射速(发/秒，参考≈12)', 'range', 12, 1, 60, 0.5],
@@ -81,13 +83,14 @@ export const GROUPS = [
     ['jumpHeight', '跳跃高度(格，≥2.1 越过相邻炮台)', 'range', 2.3, 0, 6, 0.1],
     ['advanceDur', '队列前移(ms)', 'range', 200, 30, 1500, 10],
     ['leaveDur', '弹药打光离场(ms)', 'range', 380, 50, 2000, 10],
-    ['popDur', '方块消除缩小(ms)', 'range', 110, 0, 1000, 10],
-    ['debrisCount', '每个方块碎屑数(参考更浓≈5)', 'range', 5, 0, 12, 1],
+    ['popDur', '方块消除(ms，含果冻挤压)', 'range', 160, 0, 1000, 10],
+    ['jellyPop', '果冻消除挤压/拉长强度', 'range', 1, 0, 2, 0.05],
+    ['debrisCount', '每个方块碎屑数(果冻碎屑更浓≈8)', 'range', 8, 0, 16, 1],
     ['debrisLife', '碎屑存在时间(ms)', 'range', 750, 100, 3000, 50],
     ['debrisSize', '碎屑尺寸(格)', 'range', 0.26, 0.05, 0.8, 0.01],
     ['debrisSpread', '碎屑飞散速度', 'range', 1.35, 0.2, 3, 0.05],
-    ['bobAmp', '备选队列呼吸起伏幅度(格，参考≈0.1)', 'range', 0.1, 0, 0.5, 0.01],
-    ['bobPeriod', '备选队列呼吸周期(ms，参考≈550)', 'range', 550, 200, 3000, 10],
+    ['bobAmp', '前两行呼吸起伏幅度(槽位+队首，格≈0.1)', 'range', 0.1, 0, 0.5, 0.01],
+    ['bobPeriod', '前两行呼吸周期(ms，参考≈550)', 'range', 550, 200, 3000, 10],
     ['aimSpeed', '射击时车身转向速度(°/秒)', 'range', 420, 0, 1200, 10],
     ['turretExtra', '炮塔相对车身额外转角(°，参考上半身更跟手)', 'range', 8, 0, 45, 1],
     ['recoil', '射击后坐(格)', 'range', 0.12, 0, 0.6, 0.01],
@@ -189,7 +192,11 @@ export function migrate(obj) {
     mv('handImg', 'handImage'); mv('sfxVol', 'sfxVolume'); mv('sfx', 'sfxMute', x => !x); mv('recTail', 'tailSec', x => Math.round(x / 100) / 10); mv('endText', 'endTitle');
     v = 1;
   }
-  const OLD = { 2: { debrisCount: 2 } }; // 版本 → 旧默认（仍等于旧默认才替换）；v1 为首版
+  const OLD = {
+    2: { debrisCount: 2 },
+    // v3：恢复任意外露面可打 + 材质/描边/果冻/球默认
+    3: { outline3d: 0.6, ballGlow: 0.55, ballHalo: 1.55, ballHaloOp: 0.32, mat3dRough: 0.8, light3dSun: 2.1, light3dAmbient: 1.25, light3dElev: 62, popDur: 110, debrisCount: 5 },
+  }; // 版本 → 旧默认（仍等于旧默认才替换）
   for (const nv of Object.keys(OLD).map(Number).sort((a, b) => a - b)) if (v < nv) { for (const k in OLD[nv]) if (s[k] === OLD[nv][k]) delete s[k]; v = nv; }
   const out = { ...DEFS };
   for (const k in DEFS) if (k in s && typeof s[k] === typeof DEFS[k]) out[k] = s[k];

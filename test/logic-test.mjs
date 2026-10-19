@@ -1,17 +1,27 @@
-import { refQueues, refVolume, makeLevel, simulate, randomVolume, volumeFromImage, initState, exposedAt, frontExposedAt, isFrontTarget, availCount, removeVoxel, coords, idx } from '../src/level.js';
+import { refQueues, refVolume, makeLevel, simulate, randomVolume, volumeFromImage, initState, exposedAt, availCount, removeVoxel, coords, idx, pickTarget } from '../src/level.js';
 let fail = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fail++; };
 const V = refVolume(); const cnt = V.palette.map((_, c) => V.vox.filter(v => v === c + 1).length);
 ok(V.W === 31 && V.H === 13 && V.D === 46, `参考体素 31×13×46，各色 ${V.palette.map((p, c) => p + ':' + cnt[c]).join(' ')}`);
 const st = initState(V); ok(st.exp[2].size > 0 && st.exp[3].size === 0, `初始外露：黑 ${st.exp[2].size}，黄 ${st.exp[3].size}（黄色藏在黑色下面，参考 0–14s 黄炮台等待）`);
-// 正面朝向炮台才可打：开局黑虽顶面外露但正面未开 → 不可打；绿/紫正面可打；黄仍不可打
-ok(availCount(V, st, 2) === 0 && availCount(V, st, 3) === 0, `初始可打：黑 ${availCount(V, st, 2)} 黄 ${availCount(V, st, 3)}（仅正面外露可打）`);
+// v1.0.3：任一面外露均可打（不是仅正面墙）。开局黑顶面外露 → 可打；黄仍不可打；绿/紫可打
+ok(availCount(V, st, 2) > 0 && availCount(V, st, 3) === 0, `初始可打：黑 ${availCount(V, st, 2)} 黄 ${availCount(V, st, 3)}（顶面外露可打；黄仍藏着）`);
 ok(availCount(V, st, 1) > 0 && availCount(V, st, 0) > 0, `初始可打：绿 ${availCount(V, st, 1)} 紫 ${availCount(V, st, 0)}`);
-ok([...st.exp[1]].every(m => { const [i, j, k] = coords(V, m); return !isFrontTarget(V, st, m) || frontExposedAt(V, st.vox, i, j, k); }), '绿可打子集均满足 frontExposedAt');
-// 清掉中线绿条若干层后，更深的绿变为正面可打；黑仍须等绿开路
+// 绿外露集合里应有顶面菱形（j 较高且 k>0）——证明不是 front-wall-only
+{ let topish = 0; for (const m of st.exp[1]) { const [i, j, k] = coords(V, m); if (k > 0 && j >= V.H - 3) topish++; }
+  ok(topish > 0, `绿顶面/深层外露可打 ${topish}（非仅正面墙）`); }
+ok([...st.exp[0]].every(m => { const [i, j, k] = coords(V, m); return exposedAt(V, st.vox, i, j, k); }), '紫外露子集均满足 exposedAt');
+// 清掉中线绿条后，更深通路打开；黑仍可打；黄在黑剥落后才外露
 { const st2 = initState(V); const cx = 15; let cleared = 0;
   for (let k = 0; k < 16; k++) for (let j = 0; j < V.H; j++) { const n = idx(V, cx, j, k); if (st2.vox[n] === 2) { removeVoxel(V, st2, n); cleared++; } }
-  ok(cleared > 0 && availCount(V, st2, 2) > 0, `清中线绿 ${cleared} 后黑正面可打 ${availCount(V, st2, 2)}（黄 ${availCount(V, st2, 3)}）`);
+  ok(cleared > 0 && availCount(V, st2, 2) > 0, `清中线绿 ${cleared} 后黑仍可打 ${availCount(V, st2, 2)}（黄 ${availCount(V, st2, 3)}）`);
+  // 再清顶层黑若干 → 黄露出
+  let blackCleared = 0;
+  for (const m of [...st2.exp[2]]) { if (st2.vox[m] === 3) { removeVoxel(V, st2, m); blackCleared++; if (blackCleared > 30) break; } }
+  ok(availCount(V, st2, 3) > 0 || st2.exp[3].size > 0, `剥黑后黄外露 ${st2.exp[3].size} 可打 ${availCount(V, st2, 3)}`);
 }
+// pickTarget：同色外露取近处（一发一格）
+{ const st3 = initState(V); const m = pickTarget(V, st3, 0, 0, 8, 0, n => { const [i, j, k] = coords(V, n); return [i, j, -k]; });
+  ok(m >= 0 && st3.vox[m] === 1, `紫 pickTarget 命中一格 ${m}`); }
 
 // 正面中线是绿色竖条
 ok([...Array(12).keys()].every(j => V.vox[idx(V, 15, j, 0)] === 2), '正面中线 1 格宽绿色竖条（12 层）');

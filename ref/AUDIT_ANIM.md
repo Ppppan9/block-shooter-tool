@@ -99,3 +99,26 @@
 | 正面可打 | PASS | 保持 v1.0.1 |
 
 剩余 GAP：绿顶面菱形轮廓略偏；手指资产≠参考卡通手（规范优先麻将手）；槽位炮台不呼吸（参考亦基本静止，仅后坐）；弹道口不随 yaw 偏转（视觉转、弹道仍中心炮口，避免穿模）。
+
+---
+
+## v1.0.3 规则重释与表现（2026-10-19）
+
+### 命中规则重释（关键）
+
+用户原话「只消除最靠近发射区的那一面」被 v1.0.1 误读成「只有结构正面墙（`k===0` / `k-1` 空）可打」。
+正确含义：**每一发只打目标体素朝向炮口的那一面（一发一格、不 cascading / 不穿射多层）**，而不是「只有正面墙上的体素合法」。
+
+| 项 | 判定 | 证据 |
+|---|---|---|
+| 任一面外露可打 | **FIXED** | 去掉 `frontExposedAt` / `isFrontTarget`；`availCount`/`pickTarget`/`pickTargetLOS` 恢复 `exposedAt`（顶/前/左/右/背腔） |
+| 一发一格 + 球体 LOS | PASS | `sphereHitsVox` 不清穿实心；命中点 `hitPoint` 仍偏好朝向炮口的外露面 |
+| 隧道/竖井 | RESTORED | 剥落后腔内露时沿法线入口飞入（参考中线坑） |
+| 黄等黑开 / 绿打菱形 / 紫打壳侧顶 / 黑顶线 | PASS | 开局黑顶面 `availCount>0` 但 LOS 可能挡；黄 `exp=0` 直至黑剥落；`test:logic` |
+| 前两行呼吸 | FIXED | **仅槽位 + 队列 `row===0`** bob；后排静止（用户红圈纠正：不是整列） |
+| 果冻消除 | FIXED | `jellyPop` 挤压→拉长→缩小 + `debrisCount` 默认 8 |
+| 白球材质 | FIXED | 半透明软光泽 + rim + 淡 halo；降低刺眼 emissive（`ballGlow` 0.28） |
+| 炮台描边 | FIXED | `outline3d` 默认 0.95，描边缩放系数 0.09；碰撞盒不含描边 |
+| 方块/炮台材质 | FIXED | `voxRough≈0.36` 果冻亮塑料；`tankRough≈0.72` 半哑光玩具；顶光 elev 68 |
+
+截图：`screenshots/v103_top_side_hits.png`、`v103_bob_front2.png`、`v103_jelly_pop.png`、`v103_ball_outline.png`

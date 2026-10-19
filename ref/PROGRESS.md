@@ -1,4 +1,12 @@
-# PROGRESS（方块射击核玩工具 block-shooter-tool）
+# 进度
+
+## v1.0.3（2026-10-19）
+- **命中规则重释**：去掉 front-wall-only；任一面 `exposedAt` 可打；恢复隧道 LOS；一发一格
+- **呼吸**：仅槽位 + 队列 row0（用户红圈前两行）；后排静止
+- **果冻消除** + 更密同色碎屑；白球半透明软光泽；炮台描边加厚；vox/tank 分粗糙度
+- `test:logic` / `test:clip` PASS；Pages 发布
+
+PROGRESS（方块射击核玩工具 block-shooter-tool）
 
 ## v1.0.2（2026-10-19）
 - ✅ 备选队列呼吸起伏（`bobAmp`/`bobPeriod`，仅视觉 bobY，相位按 id 错开）
