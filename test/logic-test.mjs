@@ -1,7 +1,7 @@
 import { refQueues, refVolume, makeLevel, simulate, randomVolume, volumeFromImage, initState, exposedAt, shootableAt, isShootable, availCount, removeVoxel, coords, idx, pickTarget } from '../src/level.js';
 let fail = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fail++; };
 const V = refVolume(); const cnt = V.palette.map((_, c) => V.vox.filter(v => v === c + 1).length);
-ok(V.W === 31 && V.H === 13 && V.D === 46, `参考体素 31×13×46，各色 ${V.palette.map((p, c) => p + ':' + cnt[c]).join(' ')}`);
+ok(V.W === 31 && V.H === 12 && V.D === 46, `参考体素 31×12×46，各色 ${V.palette.map((p, c) => p + ':' + cnt[c]).join(' ')}`);
 const st = initState(V); ok(st.exp[2].size > 0 && st.exp[3].size === 0, `初始外露：黑 ${st.exp[2].size}，黄 ${st.exp[3].size}（黄色藏在黑色下面，参考 0–14s 黄炮台等待）`);
 // v1.0.4：仅正面朝向炮台可打（shootableAt）。开局黑虽顶面外露但正面未开 → avail=0；黄仍不可打；绿/紫正面可打
 ok(availCount(V, st, 2) === 0 && availCount(V, st, 3) === 0, `初始可打：黑 ${availCount(V, st, 2)} 黄 ${availCount(V, st, 3)}（顶面外露≠可打；正面未开）`);
@@ -32,6 +32,19 @@ ok([...st.exp[0]].every(m => { const [i, j, k] = coords(V, m); return exposedAt(
   ok(m >= 0 && st3.vox[m] === 1 && shootableAt(V, st3.vox, i, j, k), `紫 pickTarget 正面一格 k=${k}`); }
 
 ok([...Array(12).keys()].every(j => V.vox[idx(V, 15, j, 0)] === 2), '正面中线 1 格宽绿色竖条（12 层）');
+{ let bump = 0; for (let k = 0; k < V.D; k++) for (let i = 0; i < V.W; i++) {
+  const nTop = idx(V, i, V.H - 1, k), nBelow = V.H > 1 ? idx(V, i, V.H - 2, k) : -1;
+  if (V.vox[nTop] === 2 && nBelow >= 0 && V.vox[nBelow] !== 2) bump++; // green floating above non-green
+}
+  // 顶层绿仅出现在同柱下层也为绿（或同色壳）时才不算「浮空」；整层同 j，无单独高出一格的绿
+  let greenTop = 0, greenOnlyTop = 0;
+  for (let k = 0; k < V.D; k++) for (let i = 0; i < V.W; i++) {
+    if (V.vox[idx(V, i, V.H - 1, k)] === 2) { greenTop++; if (V.H > 1 && V.vox[idx(V, i, V.H - 2, k)] === 0) greenOnlyTop++; }
+  }
+  ok(greenTop > 0 && greenOnlyTop === 0, `顶层绿 ${greenTop} 均有下层支撑（浮空 ${greenOnlyTop}）`);
+  // 同层顶面：绿与紫同在 j=H-1，无更高层
+  ok(V.H === 12, '参考高度 12 层（无额外凸起层）');
+}
 const t0 = Date.now(); const L = makeLevel(refVolume({ D: 14 }), { prefs: ['black', 'green', 'purple', 'yellow', 'green', 'black'] });
 ok(L && L.plan.every(s => s.ammo > 0 && s.ammo <= 200), `参考关（D=14）炮台 ${L.plan.length} 个，弹药合计 ${L.plan.reduce((a, s) => a + s.ammo, 0)} = 方块 ${L.voxels}`);
 ok(L.plan.reduce((a, s) => a + s.ammo, 0) === L.voxels, '弹药总数 = 方块总数（每颗球都消除一个方块）');

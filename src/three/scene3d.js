@@ -10,8 +10,8 @@ export const IS3D = a => IS3D_RE.test(a || '');
 let shared = null;
 export function geos(S) {
   if (shared && shared.key === S.voxRound + '|' + S.voxGap) return shared;
-  const g = 1 - S.voxGap, r = Math.min(0.45 * g, S.voxRound);
-  // 方块：更高细分圆角（参考果冻/软糖）；球：高细分珍珠白珠
+  // 边长 = 格距×(1−voxGap)；默认 voxGap≈−0.02 → 略重叠，圆角不会在邻接处开缝（参考果冻贴合）
+  const g = Math.max(0.5, 1 - S.voxGap), r = Math.min(0.42 * g, Math.max(0, S.voxRound));
   shared = { key: S.voxRound + '|' + S.voxGap, vox: new RoundedBoxGeometry(g, g, g, 4, r), ball: new THREE.SphereGeometry(1, 28, 20), debris: new RoundedBoxGeometry(1, 1, 1, 2, 0.2), slot: new THREE.CylinderGeometry(1, 1, 0.08, 40) };
   return shared;
 }

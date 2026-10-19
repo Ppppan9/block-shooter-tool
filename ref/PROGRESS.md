@@ -1,3 +1,8 @@
+## v1.0.8（2026-10-19）
+- **方块贴合无缝对齐**：默认 `voxGap=-0.035`（≈3.5% 重叠）+ `voxRound=0.12`，邻接圆角不再开暗缝（corduroy）
+- **绿菱形顶面平整**：`refVolume` H=12、同层同 j，去掉 H-1 零星凸起；`neighborImpulse` 保持 0
+- `SETTINGS_VERSION` 8；`test:logic` / `test:clip`；Pages 发布
+
 ## v1.0.6（2026-10-19）
 - **层间对齐 / 角落凸起修复**：v1.0.5 `neighborImpulse` 连射叠乘导致 idle 墙面波浪与左下凸起；默认强度改为 **0**（对齐参考：邻块不位移），存活体素 rest = `worldOf(i,j,k)` + scale(1,1,1)
 - 若手动开启邻块 FX：每格最多 1 条 wobble、总数≤48、短峰后硬回 identity，禁止残差

@@ -10,16 +10,16 @@ export function rng(seed) { let s = (seed >>> 0) || 1; return () => { s ^= s << 
 // 参考关卡：31×12×46，紫色外壳；顶面绿色菱形（中心 k=15，半对角 x 12.3 / z 13.75，内部向下收窄成“漏斗/树”），正面中线 1 格宽绿色竖条；
 // 中线（菱形后角之后）顶层黑色、下面黄色的竖直夹层
 export function refVolume(o = {}) {
-  const W = o.W || 31, H = o.H || 13, D = o.D || 46, L = { W, H, D, vox: new Uint8Array(W * H * D), palette: ['purple', 'green', 'black', 'yellow'] };
-  const cx = (W - 1) / 2, kc = 15, rx = 12.3, rz = 13.75, top = H - 2, r = rng(7);
+  // H=12 对齐 fit_camera / 参考紫壳 12 层；顶层同 j，无零星凸起（避免绿菱形顶面高低错落）
+  const W = o.W || 31, H = o.H || 12, D = o.D || 46, L = { W, H, D, vox: new Uint8Array(W * H * D), palette: ['purple', 'green', 'black', 'yellow'] };
+  const cx = (W - 1) / 2, kc = 15, rx = 12.3, rz = 13.75, top = H - 1;
   for (let k = 0; k < D; k++) for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
     let c = 0; const di = Math.abs(i - cx), dk = Math.abs(k - kc), dd = di / rx + dk / rz;
     if (j <= top) c = 1; // 紫
-    const shrink = Math.pow((top - j) / top, 0.8); // 漏斗：越往下越窄
+    const shrink = Math.pow((top - j) / Math.max(1, top), 0.8); // 漏斗：越往下越窄
     if (j <= top && dd <= 1 - shrink * 0.95) c = 2;
     if (j <= top && di < 0.5 && k <= kc) c = 2; // 正面竖条 / 夹层（绿）
-    if (di < 0.5 && k > kc && j <= top && (k > kc + rz * 0.98 || j >= top - 1)) c = j === top ? 3 : (k > kc + rz * 0.98 || j < top - 1 ? 4 : 3); // 中线黑（顶层，菱形内两层）/ 黄（黑色下面）夹层
-    if (j === H - 1) c = (dd <= 0.92 && r() < 0.38 && !(di < 0.5 && k > kc)) ? 2 : 0; // 菱形内凸起一层
+    if (di < 0.5 && k > kc && j <= top && (k > kc + rz * 0.98 || j >= top - 1)) c = j === top ? 3 : (k > kc + rz * 0.98 || j < top - 1 ? 4 : 3); // 中线黑（顶层）/ 黄夹层
     L.vox[idx(L, i, j, k)] = c;
   }
   return L;

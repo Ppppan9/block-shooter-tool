@@ -4,11 +4,14 @@
 
 在线：https://ppppan9.github.io/block-shooter-tool/
 
+## v1.0.8：方块贴合无缝对齐
+- 默认 `voxGap=-0.035`（略重叠）+ `voxRound=0.12`，邻接圆角不再开暗缝；参考关 H=12 顶面同层平整（无零星凸起）；`neighborImpulse` 保持 0。设置版本 8。截图：`screenshots/v108_*`。
+
 ## v1.0.7：导出 H5 试玩广告
 - 新增面板「导出 H5 试玩广告」（在导出 3D 之后）：一键导出 ZIP，含 TikTok/Pangle、Google Ads Playable、Mintegral、Generic 四个渠道子目录；试玩包无编辑器面板，仅游戏画面 + CTA；设置版本 7。`npm run test:h5` → `screenshots/block_shooter_h5_sample.zip`。
 
 ## 玩法
-- **体素关卡**：参考关 31×13×46（紫壳 + 绿菱形漏斗 + 正面绿中线 + 黑/黄夹层）；随机生成 / 导入透明 PNG/WebP（每像素 → 一根体素柱，alpha = 无方块，颜色量化）。
+- **体素关卡**：参考关 31×12×46（紫壳 + 绿菱形漏斗 + 正面绿中线 + 黑/黄夹层）；随机生成 / 导入透明 PNG/WebP（每像素 → 一根体素柱，alpha = 无方块，颜色量化）。
 - **6 列队列 + 5 个槽位**：点击队首炮台 → 跳到最左空槽；槽内同色**正面朝向炮台外露**目标自动射击（约 12 发/秒；一发一格）；弹药打光离场；无目标时等待。
 - 小球带弹道避障（平射 / 抛物线 / 隧道沿法线飞入），命中消除 + 弹开物理 + 碎屑。
 - **▶ 自动通关**：参考关按开局黄→黑→绿，之后按外露可打数动态点击；随机/图片关按生成器计划顺序（弹药 ≤ 外露未预支 → 永不卡死）。
@@ -41,6 +44,7 @@ npm run test:cursor  # hideCursor + 默认麻将手指
 - `screenshots/v104_*.png`：v1.0.4 正面可打 / 珍珠白珠 / 缎面果冻方块 / 命中碎裂球消失；`v104_hit_metrics.json`
 - `screenshots/v105_*.png`：v1.0.5 命中邻块果冻挤动（径向鼓包/回弹）
 - `screenshots/v106_*.png`：v1.0.6 层间对齐 / 角落凸起修复（邻块默认不位移；对照参考）
+- `screenshots/v108_*.png`：v1.0.8 方块贴合无缝 / 顶面平整（对照参考）
 - `screenshots/shape_*.png`：图片导入关
 - `screenshots/ae_export_check.jpg`、`export3d_blender_compare.jpg`：导出校验
 

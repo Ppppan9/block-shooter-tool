@@ -1,7 +1,7 @@
 // 逐帧 3D 穿模 / 对齐测试（虚拟时钟，跳过 3D 渲染）：自动通关全过程每帧检查
 //  1) 小球 vs 实心方块（球-AABB 穿入深度）  2) 小球 vs 底座 / 地面  3) 小球 vs 炮台（模型真实包围盒；发射中的本炮台前 25% 路径除外）
 //  4) 炮台 vs 炮台（队列 / 跳跃 / 槽位 / 离场，含缩放）  5) 炮台 vs 底座 / 方块
-//  6) 体素网格对齐（格心 = 网格坐标 × 边长，底层贴底座顶面，几何尺寸 ≤ 格宽，相邻不重叠）
+//  6) 体素网格对齐（格心 = 网格坐标 × 边长，底层贴底座顶面；几何边长≈1−voxGap，允许略重叠贴合）
 //  7) 几何数量核对参考（31 列 / 6 列队列 / 5 槽位 / 炮台 6 个元素 / 4 色）
 // 用法：node test/clip-test.mjs   （CASES 环境变量可选：ref,rand3,rand42,img）
 import { chromium } from 'playwright-core';
@@ -16,12 +16,15 @@ for (const cs of CASES) {
   const r = await p.evaluate(async ([cfg, TOL, maxS]) => {
     Math.random = (() => { let s = 11; return () => { s = (s * 16807) % 2147483647; return s / 2147483647; }; })();
     for (const [k, v] of Object.entries(cfg)) __game.set(k, v);
+    __game.set('voxGap', -0.035); __game.set('voxRound', 0.12); __game.set('neighborImpulse', 0);
     __game.set('autoSpeed', 3); __game.set('autoStartDelay', 100);
     window.__no3d = true; let t = 300000; __game.renderAt(t);
     const Wd = __game.world, L = __game.L, S = __game.S, st = __game.st, vs = Wd.vs, B = Wd.base, SB = __game.shooterBox();
     const V = {}, ex = {}; const lastF = {}; const bad = (k, msg) => { V[k] = (V[k] || 0) + 1; const fr = +(/^f(\d+)/.exec(msg) || [0, -99])[1]; if (!ex[k]) ex[k] = []; if (ex[k].length < 6 && fr - (lastF[k] ?? -99) > 15) { ex[k].push(msg); lastF[k] = fr; } };
     // ---- 静态：网格对齐 / 几何数量 ----
-    const g = __game.voxGeoSize(); if (g.some(x => x * vs > vs + 1e-6)) bad('voxGeoOversize', JSON.stringify(g));
+    // allow slight overlap (negative voxGap => unit geo >1) to kill rounded seams; cap matches settings min
+    const g = __game.voxGeoSize(), expect = 1 - (S.voxGap ?? 0), maxU = Math.max(1.08, expect + 0.02);
+    if (g.some(x => x > maxU + 1e-6 || x < 0.5 || Math.abs(x - expect) > 0.03)) bad('voxGeoOversize', JSON.stringify({ g, expect, voxGap: S.voxGap }));
     for (let n = 0; n < st.vox.length; n += 1) { const i = n % L.W, j = Math.floor(n / L.W) % L.H, k = Math.floor(n / (L.W * L.H)), c = Wd.vox(n);
       if (Math.abs(c[0] - (i - (L.W - 1) / 2) * vs) > 1e-6 || Math.abs(c[1] - (B.y1 + (j + 0.5) * vs)) > 1e-6 || Math.abs(c[2] - (-(k + 0.5) * vs)) > 1e-6) { bad('gridAlign', n + ' ' + c.join(',')); }
       if (j === 0 && c[0] - vs / 2 < B.x0 - 1e-6 || c[0] + vs / 2 > B.x1 + 1e-6 || c[2] + vs / 2 > B.z1 + 1e-6 || c[2] - vs / 2 < B.z0 - 1e-6) bad('voxOffBase', n + ''); }

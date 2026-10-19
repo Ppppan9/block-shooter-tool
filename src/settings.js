@@ -1,6 +1,6 @@
 // 设置定义：所有可调参数。版本号 + 迁移（通用分组、键名、标签与麻将 / 打螺丝 / 咖啡工具一致，见 ref/TOOLKIT_STANDARD.md）
 import { DEFAULT_HAND } from './default_hand.js';
-export const SETTINGS_VERSION = 7;
+export const SETTINGS_VERSION = 8;
 export const STORE_KEY = 'blockShooterTool.settings';
 export const APP_ID = 'block-shooter-tool';
 // [key, 标签, 类型, 默认, min, max, step]  类型: range/color/bool/select/text/file/button
@@ -8,7 +8,7 @@ export const GROUPS = [
   ['画布与关卡', [
     ['canvasW', '画布宽度(px)', 'range', 720, 360, 1440, 2],
     ['canvasH', '画布高度(px)', 'range', 1280, 640, 2560, 2],
-    ['level', '关卡', 'select', 'reference', [['reference', '参考关卡（31×13×46 紫壳 + 绿菱形 + 黑/黄中线）'], ['random', '随机生成（保证可解）'], ['image', '导入透明图形生成']]],
+    ['level', '关卡', 'select', 'reference', [['reference', '参考关卡（31×12×46 紫壳 + 绿菱形 + 黑/黄中线）'], ['random', '随机生成（保证可解）'], ['image', '导入透明图形生成']]],
     ['seed', '随机种子', 'range', 1, 1, 9999, 1],
     ['refDepth', '参考关卡深度(格，参考≈46：画面顶端仍未到尽头)', 'range', 46, 4, 60, 1],
     ['randW', '随机关：宽(列)', 'range', 15, 3, 40, 1],
@@ -47,8 +47,8 @@ export const GROUPS = [
     ['baseRadius', '底座圆角(格)', 'range', 0.6, 0, 2, 0.05],
     ['slotColor', '槽位颜色', 'color', '#f4f2ff'],
     ['slotR', '槽位半径(格)', 'range', 1.2, 0.3, 1.4, 0.01],
-    ['voxGap', '方块间缝(×格，缝大一点显 AO)', 'range', 0.06, 0, 0.3, 0.005],
-    ['voxRound', '方块圆角(×格，参考果冻圆角约0.26)', 'range', 0.26, 0, 0.45, 0.01],
+    ['voxGap', '方块间缝(×格，负=重叠贴合杀缝，参考≈-0.035)', 'range', -0.035, -0.08, 0.3, 0.005],
+    ['voxRound', '方块圆角(×格，贴合时略小防开缝，参考≈0.12)', 'range', 0.12, 0, 0.45, 0.01],
     ['outline3d', '卡通描边粗细(炮台，参考玩具描边)', 'range', 0.95, 0, 2, 0.05],
     ['numBackOpacity', '后排炮台数字不透明度(参考≈0.45)', 'range', 0.45, 0, 1, 0.01],
     ['ballR', '小球半径(格；参考珍珠白珠略大)', 'range', 0.34, 0.1, 0.8, 0.01],
@@ -218,6 +218,8 @@ export function migrate(obj) {
     6: { neighborImpulse: 0.55, neighborRadius: 1.75, neighborDur: 260 },
     // v7：导出 H5 试玩广告（新键直接取 DEFS）
     7: {},
+    // v8：方块贴合无缝（略重叠 + 较小圆角）；仍等于旧默认才替换
+    8: { voxGap: 0.06, voxRound: 0.26 },
   }; // 版本 → 旧默认（仍等于旧默认才替换）
   for (const nv of Object.keys(OLD).map(Number).sort((a, b) => a - b)) if (v < nv) { for (const k in OLD[nv]) if (s[k] === OLD[nv][k]) delete s[k]; v = nv; }
   const out = { ...DEFS };
