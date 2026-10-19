@@ -59,7 +59,7 @@ function newGame() {
 function startLevel(Lnew) {
   L = Lnew; st = initState(L); finishedAt = 0; failedAt = 0; window.__finished = false; window.__failed = false; lastT = now();
   G = { shooters: [], queues: L.queues.map(() => []), slots: new Array(SLOTS).fill(null), balls: [], pops: [], debris: [], planIdx: 0, shots: 0 };
-  L.queues.forEach((q, c) => q.forEach((s, r) => { const sh = { id: G.shooters.length, plan: s, color: s.color, ammo: s.ammo, left: s.ammo, col: c, state: 'queue', row: r, rowFrom: r, rowT: -1e9, slot: -1, t0: 0, fireNext: 0, recoilT: -1e9, pressT: -1e9, inFlight: 0 }; G.shooters.push(sh); G.queues[c].push(sh); }));
+  L.queues.forEach((q, c) => q.forEach((s, r) => { const sh = { id: G.shooters.length, plan: s, color: s.color, ammo: s.ammo, left: s.ammo, col: c, state: 'queue', row: r, rowFrom: r, rowT: -1e9, slot: -1, t0: 0, fireNext: 0, recoilT: -1e9, pressT: -1e9, inFlight: 0, yaw: 0, aimYaw: 0, turretYaw: 0 }; G.shooters.push(sh); G.queues[c].push(sh); }));
   rebuild();
   if (aeActive()) { aeRec.start(); updateAEButtons(); }
   status(`方块 ${L.voxels} 个（${L.W}×${L.H}×${L.D}），炮台 ${L.plan.length} 个，颜色 ${L.palette.join('/')}`);
@@ -82,14 +82,14 @@ function rebuild() {
 // ---------- 规则 / 动画 ----------
 const slotPos = i => Wd.slots[i];
 // 炮台模型真实包围盒（不含数字标签；底面中心为原点）——小球碰撞与穿模测试共用
-function shooterBox() { const key = Wd.SH.w + '|' + S.outline3d; if (shooterBox.k !== key) { const m = makeShooter(S, 'green', Wd); m.remove(m.userData.label); m.updateMatrixWorld(true); const b = new THREE.Box3().setFromObject(m); shooterBox.k = key; shooterBox.v = { x0: b.min.x, x1: b.max.x, y0: b.min.y, y1: b.max.y, z0: b.min.z, z1: b.max.z, parts: m.children.map(c => { const q = new THREE.Box3().setFromObject(c); return { name: c.name, x0: q.min.x, x1: q.max.x, y0: q.min.y, y1: q.max.y, z0: q.min.z, z1: q.max.z }; }) }; } return shooterBox.v; }
-function shooterWorld(sh, t) { // 炮台底面中心世界坐标 + 缩放
+function shooterBox() { const key = Wd.SH.w + '|' + S.outline3d; if (shooterBox.k !== key) { const m = makeShooter(S, 'green', Wd); if (m.userData.label && m.userData.label.parent) m.userData.label.parent.remove(m.userData.label); if (m.userData.body) m.userData.body.rotation.set(0, 0, 0); if (m.userData.upper) m.userData.upper.rotation.set(0, 0, 0); m.updateMatrixWorld(true); const b = new THREE.Box3().setFromObject(m), parts = []; m.traverse(c => { if (!c.isMesh || c.name.endsWith('_outline') || !/^(track_L|track_R|hull|turret|barrel)$/.test(c.name)) return; const q = new THREE.Box3().setFromObject(c); parts.push({ name: c.name, x0: q.min.x, x1: q.max.x, y0: q.min.y, y1: q.max.y, z0: q.min.z, z1: q.max.z }); }); shooterBox.k = key; shooterBox.v = { x0: b.min.x, x1: b.max.x, y0: b.min.y, y1: b.max.y, z0: b.min.z, z1: b.max.z, parts }; } return shooterBox.v; }
+function shooterWorld(sh, t) { // 炮台底面中心世界坐标 + 缩放 + yaw
   const [qx, qz] = Wd.queuePos(sh.col, 0);
-  if (sh.state === 'queue') { const p = easeIO((t - sh.rowT) / S.advanceDur), r = sh.rowFrom + (sh.row - sh.rowFrom) * p, q = Wd.queuePos(sh.col, r); return { x: q[0], y: 0, z: q[1], s: 1 }; }
-  if (sh.state === 'jump') { const p = clamp01((t - sh.t0) / S.jumpDur), e = easeIO((p - 0.2) / 0.6), [sx, sz] = slotPos(sh.slot); return { x: qx + (sx - qx) * e, y: Math.min(1, Math.sin(Math.PI * p) * 1.6) * S.jumpHeight, z: qz + (sz - qz) * e, s: 1 }; } // 先起跳（越过相邻队首炮台），再平移，最后落入槽位
+  if (sh.state === 'queue') { const p = easeIO((t - sh.rowT) / S.advanceDur), r = sh.rowFrom + (sh.row - sh.rowFrom) * p, q = Wd.queuePos(sh.col, r); const bob = S.bobAmp * (0.5 + 0.5 * Math.sin(2 * Math.PI * (t / Math.max(1, S.bobPeriod)) + sh.id * 2.399963)); return { x: q[0], y: 0, z: q[1], s: 1, bobY: bob, yaw: 0, turretYaw: 0 }; } // 呼吸仅视觉 bobY，物理 y=0
+  if (sh.state === 'jump') { const p = clamp01((t - sh.t0) / S.jumpDur), e = easeIO((p - 0.2) / 0.6), [sx, sz] = slotPos(sh.slot); return { x: qx + (sx - qx) * e, y: Math.min(1, Math.sin(Math.PI * p) * 1.6) * S.jumpHeight, z: qz + (sz - qz) * e, s: 1, yaw: sh.yaw || 0, turretYaw: sh.turretYaw || 0 }; }
   const [sx, sz] = slotPos(sh.slot);
-  if (sh.state === 'slot') { const rp = (t - sh.recoilT) / 90, rc = rp >= 0 && rp < 1 ? Math.sin(Math.PI * rp) * S.recoil : 0, land = (t - sh.t0) / 160, sq = land < 1 ? 1 - 0.12 * Math.sin(Math.PI * land) : 1; return { x: sx, y: 0, z: sz + rc, s: 1, sy: sq }; }
-  if (sh.state === 'leave') { const p = clamp01((t - sh.t0) / S.leaveDur); return { x: sx, y: Math.sin(Math.PI * Math.min(1, p * 1.6)) * 0.8, z: sz, s: Math.max(0.001, 1 - easeIO(p)) }; }
+  if (sh.state === 'slot') { const rp = (t - sh.recoilT) / 90, rc = rp >= 0 && rp < 1 ? Math.sin(Math.PI * rp) * S.recoil : 0, land = (t - sh.t0) / 160, sq = land < 1 ? 1 - 0.12 * Math.sin(Math.PI * land) : 1; return { x: sx, y: 0, z: sz + rc, s: 1, sy: sq, yaw: sh.yaw || 0, turretYaw: sh.turretYaw || 0 }; }
+  if (sh.state === 'leave') { const p = clamp01((t - sh.t0) / S.leaveDur); return { x: sx, y: Math.sin(Math.PI * Math.min(1, p * 1.6)) * 0.8, z: sz, s: Math.max(0.001, 1 - easeIO(p)), yaw: sh.yaw || 0, turretYaw: sh.turretYaw || 0 }; }
   return null;
 }
 function frontOf(c) { return G.queues[c].find(s => s.state === 'queue') || null; }
@@ -144,10 +144,22 @@ function step(t) {
     if (sh.state === 'jump' && t - sh.t0 >= S.jumpDur) { sh.state = 'slot'; sh.t0 = t; sh.fireNext = t + 60; }
     if (sh.state === 'slot') {
       let guard = 0;
+      // 车身/炮塔转向目标（参考：射击时上下半身都会 yaw；弹道仍从默认炮口，碰撞盒未随转）
+      {
+        const turn = (S.aimSpeed * Math.PI / 180) * dt;
+        let dy = sh.aimYaw - sh.yaw; while (dy > Math.PI) dy -= Math.PI * 2; while (dy < -Math.PI) dy += Math.PI * 2;
+        if (Math.abs(dy) <= turn) sh.yaw = sh.aimYaw; else sh.yaw += Math.sign(dy) * turn;
+        const lead = (S.turretExtra || 0) * Math.PI / 180 * (Math.abs(dy) > 0.02 ? Math.sign(dy) : 0);
+        const tAim = sh.aimYaw + lead;
+        let dty = tAim - sh.turretYaw; while (dty > Math.PI) dty -= Math.PI * 2; while (dty < -Math.PI) dty += Math.PI * 2;
+        const turnU = turn * 1.4;
+        if (Math.abs(dty) <= turnU) sh.turretYaw = tAim; else sh.turretYaw += Math.sign(dty) * turnU;
+      }
       while (sh.left > 0 && t >= sh.fireNext && guard++ < 8) {
-        const w = shooterWorld(sh, t), muz = Wd.muzzleOf(w.x, w.z), tg = pickTargetLOS(sh, muz);
+        const w = shooterWorld(sh, t), muz = Wd.muzzleOf(w.x, w.z, 0), tg = pickTargetLOS(sh, muz);
         if (!tg) { sh.fireNext = t + 50; break; }
-        if (tg.blocked && (sh.blockWait = (sh.blockWait || 0) + 1) < 40) { sh.fireNext = t + 50; break; } sh.blockWait = 0; // 没有可打目标 → 等待（参考：黄色等待到黑线打开）
+        if (tg.blocked && (sh.blockWait = (sh.blockWait || 0) + 1) < 40) { sh.fireNext = t + 50; break; } sh.blockWait = 0;
+        sh.aimYaw = Math.atan2(-(tg.hp.p[0] - w.x), -(tg.hp.p[2] - w.z));
         st.claimed[tg.m] = 1; sh.left--; sh.inFlight++; sh.recoilT = sh.fireNext; G.shots++;
         const len = Math.hypot(tg.hp.p[0] - muz[0], tg.hp.p[1] - muz[1], tg.hp.p[2] - muz[2]) + S.ballArc;
         window.__blockedShots = (window.__blockedShots || 0) + (tg.blocked ? 1 : 0); G.balls.push({ id: ++ballSeq, ph: 'fly', t0: sh.fireNext, dur: Math.max(60, len / S.ballSpeed * 1000), path: tg.path, m: tg.m, nrm: tg.hp.nrm, sh, pos: muz.slice(), blocked: !!tg.blocked });
@@ -164,7 +176,7 @@ function step(t) {
       const u = clamp01((t - b.t0) / b.dur); b.pos = b.path(u);
       if (u >= 1) { // 命中：消除方块 + 碎屑 + 弹开
         const col = L.palette[st.vox[b.m] - 1]; removeVoxel(L, st, b.m); b.sh.inFlight--; G.pops.push({ n: b.m, t0: t, c: st.vox[b.m] || 0, color: col }); if (Math.random() < 0.5) sfx.play('hit', S);
-        const vp = Wd.vox(b.m); for (let q = 0; q < S.debrisCount; q++) G.debris.push({ id: ++debSeq, color: col, p: [vp[0] + (rnd() - 0.5) * 0.5, vp[1] + (rnd() - 0.5) * 0.5, vp[2] + (rnd() - 0.5) * 0.5], v: [b.nrm[0] * 3 + (rnd() - 0.5) * 4, 3 + rnd() * 3, b.nrm[2] * 3 + (rnd() - 0.5) * 4], t0: t, s: 0.18 + rnd() * 0.12, rot: rnd() * 6 });
+        const vp = Wd.vox(b.m), dsp = S.debrisSpread, R = Math.random; for (let q = 0; q < S.debrisCount; q++) G.debris.push({ id: ++debSeq, color: col, p: [vp[0] + (R() - 0.5) * 0.65, vp[1] + (R() - 0.5) * 0.65, vp[2] + (R() - 0.5) * 0.65], v: [b.nrm[0] * 3.5 * dsp + (R() - 0.5) * 5 * dsp, (3.5 + R() * 4) * dsp, b.nrm[2] * 3.5 * dsp + (R() - 0.5) * 5 * dsp], t0: t, s: S.debrisSize * (0.65 + R() * 0.7), rot: R() * 6 }); // 碎屑用 Math.random，不消耗物理 rnd（弹开轨迹保持稳定）
         const d0 = b.path(0.97), d1 = b.path(1), dir = [d1[0] - d0[0], d1[1] - d0[1], d1[2] - d0[2]], dl = Math.hypot(...dir) || 1, n = b.nrm, dn = (dir[0] * n[0] + dir[1] * n[1] + dir[2] * n[2]) / dl;
         const ref = [dir[0] / dl - 2 * dn * n[0], dir[1] / dl - 2 * dn * n[1], dir[2] / dl - 2 * dn * n[2]], sp = S.bounceSpeed * (0.7 + 0.6 * rnd()), side = (rnd() - 0.5) * 0.9;
         b.ph = 'bounce'; b.tb = t; b.vel = [ref[0] * sp + side * sp, Math.abs(ref[1]) * sp * 0.6 + 2.5, ref[2] * sp + 1.5];
@@ -188,7 +200,7 @@ function step(t) {
   }
   G.balls = G.balls.filter(b => b.ph !== 'gone');
   for (const d of G.debris) { d.v[1] -= g * dt; d.p = [d.p[0] + d.v[0] * dt, d.p[1] + d.v[1] * dt, d.p[2] + d.v[2] * dt]; d.rot += dt * 8; }
-  G.debris = G.debris.filter(d => t - d.t0 < 500);
+  G.debris = G.debris.filter(d => t - d.t0 < S.debrisLife);
   G.pops = G.pops.filter(p => t - p.t0 < S.popDur);
   // 胜负
   if (!finishedAt && st.total === 0 && !G.balls.some(b => b.ph === 'fly')) { finishedAt = t; onFinish(); }
@@ -211,11 +223,11 @@ function scene(t) {
     const pp = (t - sh.pressT) / 160, pr = pp >= 0 && pp < 1 ? 1 - S.pressScale * Math.sin(Math.PI * pp) : 1;
     if (sh.state === 'queue' && sh.row > 16) continue; // 画面外
     const front = sh.state !== 'queue' || G.queues[sh.col][0] === sh;
-    const ws = w.s * pr, lp = Wd.proj(w.x, w.y + SH.h * 1.18 * ws * (w.sy ?? 1), w.z + 0.1);
-    at3('shooter_' + String(sh.id + 1).padStart(3, '0'), 'shooter_' + L.palette[sh.color], [w.x, w.y, w.z], ws, undefined, { num: sh.left, numOp: front ? 1 : S.numBackOpacity, wsy: w.sy ?? 1, lx: lp[0], ly: lp[1], lsx: labPx(lp, w, ws) });
+    const wy = w.y + (w.bobY || 0), ws = w.s * pr, lp = Wd.proj(w.x, wy + SH.h * 1.18 * ws * (w.sy ?? 1), w.z + 0.1);
+    at3('shooter_' + String(sh.id + 1).padStart(3, '0'), 'shooter_' + L.palette[sh.color], [w.x, wy, w.z], ws, undefined, { num: sh.left, numOp: front ? 1 : S.numBackOpacity, wsy: w.sy ?? 1, lx: lp[0], ly: lp[1], lsx: labPx(lp, w, ws), bodyYaw: w.yaw || 0, turretYaw: w.turretYaw || 0 });
   }
   for (const b of G.balls) { const life = b.ph === 'bounce' ? clamp01((S.ballLife - (t - b.tb)) / 200) : 1; at3('ball_' + b.id, 'ball', b.pos, life); }
-  for (const d of G.debris) { const p = clamp01((t - d.t0) / 500); at3('debris_' + d.id, 'debris_' + d.color, d.p, d.s * (1 - p), undefined, { rx: d.rot, ry: d.rot * 0.7 }); }
+  for (const d of G.debris) { const p = clamp01((t - d.t0) / S.debrisLife); at3('debris_' + d.id, 'debris_' + d.color, d.p, d.s * (1 - p), undefined, { rx: d.rot, ry: d.rot * 0.7 }); }
   if (S.discShow) add('disclaimer', 'disclaimer', 0, 0, { z: 90 });
   if (finishedAt && t - finishedAt > 300) add('result_win', 'result_win', 0, 0, { z: 92, op: clamp01((t - finishedAt - 300) / 300) });
   if (failedAt) add('result_lose', 'result_lose', 0, 0, { z: 92, op: clamp01((t - failedAt) / 300) });
@@ -401,7 +413,7 @@ function applyChange(k) {
   if (k === 'shapeImg' && S.shapeImg) S.level = 'image';
   saveSettings(S);
   if (k === 'handImage' || k === 'handAnchorX' || k === 'handAnchorY') loadHand();
-  if (NEWGAME_KEYS.test(k)) newGame(); else if (L && (/^(canvas|bg|col_|base|slot|vox|outline|cam3d|light3d|mat3d|disc|text|win|lose|endTitle)/.test(k))) rebuild();
+  if (NEWGAME_KEYS.test(k)) newGame(); else if (L && (/^(canvas|bg|col_|base|slot|vox|outline|cam3d|light3d|mat3d|ballR|ballGlow|ballHalo|disc|text|win|lose|endTitle)/.test(k))) rebuild();
 }
 function loadHand() { const done2 = im => { hand.img = im; if (L) rebuild(); }; const im = new Image(); im.onload = () => done2(im); im.onerror = () => done2(null); /* 默认 = 麻将工具同款手指 PNG */ im.src = S.handImage || DEFAULT_HAND; }
 function buildPanel() {
@@ -445,6 +457,6 @@ document.getElementById('btnExport').onclick = () => { const a = document.create
 document.getElementById('btnImport').onclick = () => document.getElementById('importFile').click();
 document.getElementById('importFile').onchange = e => { const f = e.target.files[0]; if (!f) return; f.text().then(t => { const j = JSON.parse(t); S = migrate(j); saveSettings(S); buildPanel(); loadHand(); newGame(); toast('已导入设置'); }).catch(() => toast('导入失败')); };
 document.getElementById('btnReset').onclick = () => { if (!confirm('恢复全部默认设置？')) return; S = { ...DEFS }; saveSettings(S); buildPanel(); loadHand(); newGame(); };
-window.__game = { renderAt: t => { window.__vclock = t; step(t); updPress(t); draw(t); if (aeActive()) aeRec.sample(t); }, get items() { return draw.items || []; }, get world() { return Wd; }, get G() { return G; }, create3D, autoSolve, newGame, tapShooter, tapAt, hitShooter, shooterScreen, scene: () => scene(now()), voxGroups: () => voxGroups(now()), doExportAE, doExport3D, aeRec, aeStart: () => recStart(), aeStop: () => aeStop(), aeActive: () => aeActive(), get aeLastRec() { return aeLastRec; }, get mediaRec() { return rec; }, startRec, stopRec, get S() { return S; }, get r3d() { return r3d; }, set(k, v) { S[k] = v; applyChange(k); buildPanel(); }, get st() { return st; }, get L() { return L; }, get hand() { return hand; }, view: () => view(), shooterWorld: (sh, t) => shooterWorld(sh, t), shooterBox: () => shooterBox(), voxGeoSize: () => { const g = geos(S).vox; g.computeBoundingBox(); const b = g.boundingBox; return [b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z]; }, shooterParts: () => { const m = makeShooter(S, 'green', Wd); return m.children.map(c => c.name); }, get shapeGen() { return shapeCache.gen || 0; }, get autoRunning() { return autoRunning; }, nextAuto, loadLevel: Lx => { autoToken++; autoRunning = false; startLevel(Lx); }, migrate, APP_ID, sphereHitsVox: (p, r, s) => sphereHitsVox(p, r, s) };
+window.__game = { renderAt: t => { window.__vclock = t; step(t); updPress(t); draw(t); if (aeActive()) aeRec.sample(t); }, get items() { return draw.items || []; }, get world() { return Wd; }, get G() { return G; }, create3D, autoSolve, newGame, tapShooter, tapAt, hitShooter, shooterScreen, scene: () => scene(now()), voxGroups: () => voxGroups(now()), doExportAE, doExport3D, aeRec, aeStart: () => recStart(), aeStop: () => aeStop(), aeActive: () => aeActive(), get aeLastRec() { return aeLastRec; }, get mediaRec() { return rec; }, startRec, stopRec, get S() { return S; }, get r3d() { return r3d; }, set(k, v) { S[k] = v; applyChange(k); buildPanel(); }, get st() { return st; }, get L() { return L; }, get hand() { return hand; }, view: () => view(), shooterWorld: (sh, t) => shooterWorld(sh, t), shooterBox: () => shooterBox(), voxGeoSize: () => { const g = geos(S).vox; g.computeBoundingBox(); const b = g.boundingBox; return [b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z]; }, shooterParts: () => { const m = makeShooter(S, 'green', Wd), out = []; m.traverse(c => { if (['track_L', 'track_R', 'hull', 'turret', 'barrel', 'label'].includes(c.name)) out.push(c.name); }); return out; }, get shapeGen() { return shapeCache.gen || 0; }, get autoRunning() { return autoRunning; }, nextAuto, loadLevel: Lx => { autoToken++; autoRunning = false; startLevel(Lx); }, migrate, APP_ID, sphereHitsVox: (p, r, s) => sphereHitsVox(p, r, s) };
 buildPanel(); loadHand(); newGame();
 requestAnimationFrame(loop);

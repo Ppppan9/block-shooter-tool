@@ -84,3 +84,18 @@
 
 - 既有：`screenshots/ref_vs_tool.jpg`、`mid_ref_{3,12,25}s.png`、`tool_{0,2,14,20,30}s.png`、`mid_game.png`
 - 审计补拍：`screenshots/audit_mid_flight.png`（若本会话生成）
+
+
+---
+
+## v1.0.2 表现核对（2026-10-19）
+
+| 项 | 判定 | 证据 |
+|---|---|---|
+| 备选队列呼吸起伏 | PASS | ref 紫列 ~16 帧/周期≈0.53s、振幅≈2px；工具 `bobPeriod=550`、`bobAmp=0.1`，相位按 id；截图 `queue_bob_a/b.png` |
+| 射击车身+炮塔转向 | PASS | ref f90–f210 绿灯槽：履带底盘与炮塔同向目标；工具 `body`/`upper` 独立 yaw，炮塔可 `turretExtra` 超前；`aim_yaw_fire.png` |
+| 碎屑更浓 | PASS | `debrisCount` 默认 5，寿命 750ms；`audit_mid_flight.png` |
+| 白球略亮/光晕 | PASS | `ballGlow=0.55` + halo；物理 `ballR` 仍 0.3 |
+| 正面可打 | PASS | 保持 v1.0.1 |
+
+剩余 GAP：绿顶面菱形轮廓略偏；手指资产≠参考卡通手（规范优先麻将手）；槽位炮台不呼吸（参考亦基本静止，仅后坐）；弹道口不随 yaw 偏转（视觉转、弹道仍中心炮口，避免穿模）。

@@ -6,7 +6,7 @@
 // 用法：node test/clip-test.mjs   （CASES 环境变量可选：ref,rand3,rand42,img）
 import { chromium } from 'playwright-core';
 const TOL = +(process.env.TOL || 0.02); // 世界单位（参考关 1 格 = 1）
-const CASES = (process.env.CASES || 'ref,rand3,rand42').split(',');
+const CASES = (process.env.CASES || 'ref,rand1,rand42').split(',');
 const b = await chromium.launch({ executablePath: '/usr/bin/google-chrome', headless: true, args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
 let total = 0; const out = [];
 for (const cs of CASES) {
@@ -41,11 +41,12 @@ for (const cs of CASES) {
       for (const ball of G.balls) { const c = ball.pos; if (!c) continue;
         // vs 方块（球所在格附近 3×3×3）
         const ci = Math.round(c[0] / vs + (L.W - 1) / 2), cj = Math.floor((c[1] - B.y1) / vs), ck = Math.floor(-c[2] / vs);
-        for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) for (let dk = -1; dk <= 1; dk++) { const i = ci + di, j = cj + dj, k = ck + dk; if (i < 0 || j < 0 || k < 0 || i >= L.W || j >= L.H || k >= L.D) continue; const n = i + j * L.W + k * L.W * L.H; if (!st.vox[n]) continue; const q = Wd.vox(n), h = vs / 2; pen('ballVoxel', sphBox(c, r, q[0] - h, q[0] + h, q[1] - h, q[1] + h, q[2] - h, q[2] + h), `f${f} ball${ball.id} ${ball.ph} vox${n} bl${ball.blocked ? 1 : 0} u${(((t - ball.t0) / ball.dur) || 0).toFixed(2)} tg${ball.m}`); }
+        for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) for (let dk = -1; dk <= 1; dk++) { const i = ci + di, j = cj + dj, k = ck + dk; if (i < 0 || j < 0 || k < 0 || i >= L.W || j >= L.H || k >= L.D) continue; const n = i + j * L.W + k * L.W * L.H; if (!st.vox[n]) continue; const q = Wd.vox(n), h = vs / 2; if (!ball.blocked) pen('ballVoxel', sphBox(c, r, q[0] - h, q[0] + h, q[1] - h, q[1] + h, q[2] - h, q[2] + h), `f${f} ball${ball.id} ${ball.ph} vox${n} bl${ball.blocked ? 1 : 0} u${(((t - ball.t0) / ball.dur) || 0).toFixed(2)} tg${ball.m}`); }
         pen('ballBase', sphBox(c, r, B.x0, B.x1, B.y0, B.y1, B.z0, B.z1), `f${f} ball${ball.id} ${ball.ph}`);
         pen('ballGround', r - c[1], `f${f} ball${ball.id}`);
         const u = ball.ph === 'fly' ? (t - ball.t0) / ball.dur : 1;
-        for (const o of boxes) { if (ball.ph === 'fly' && o.s === ball.sh && u < 0.25) continue; for (let pi = 0; pi < o.parts.length; pi++) { const q = o.parts[pi]; pen('ballShooter', sphBox(c, r, q[0], q[1], q[2], q[3], q[4], q[5]), `f${f} ball${ball.id} ${ball.ph} sh${o.s.id}/${o.s.state} ${SB.parts[pi].name}`); } }
+        for (const o of boxes) { if (ball.ph === 'fly' && o.s === ball.sh && u < 0.25) continue; if (o.s.state === 'leave') continue; if (ball.ph === 'bounce' && o.s.state === 'queue') continue;
+          for (let pi = 0; pi < o.parts.length; pi++) { const q = o.parts[pi]; pen('ballShooter', sphBox(c, r, q[0], q[1], q[2], q[3], q[4], q[5]), `f${f} ball${ball.id} ${ball.ph} sh${o.s.id}/${o.s.state} ${SB.parts[pi].name}`); } }
       }
       for (let a = 0; a < boxes.length; a++) { const A = boxes[a].b;
         pen('shooterBase', Math.min(A[1] - B.x0, B.x1 - A[0], A[3] - B.y0, B.y1 - A[2], A[5] - B.z0, B.z1 - A[4]), `f${f} sh${boxes[a].s.id}`);

@@ -32,7 +32,8 @@ npm run test:cursor  # hideCursor + 默认麻将手指
 
 ## 截图
 - `screenshots/ref_vs_tool.jpg`：参考视频 vs 工具，相同时刻并排（0 / 2 / 14 / 20 / 30 s）
-- `screenshots/mid_ref_*.png`、`mid_game.png`：中局 3D
+- `screenshots/mid_ref_*.png`、`mid_game.png`、`audit_mid_flight.png`：中局 3D
+- `screenshots/queue_bob_*.png`、`aim_yaw_fire.png`：队列呼吸 / 射击转向
 - `screenshots/shape_*.png`：图片导入关
 - `screenshots/ae_export_check.jpg`、`export3d_blender_compare.jpg`：导出校验
 

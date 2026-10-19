@@ -15,7 +15,7 @@ export function geos(S) {
   return shared;
 }
 const matCache = new Map();
-export function mat(S, hex, o = {}) { const key = hex + JSON.stringify(o) + S.mat3dRough; if (!matCache.has(key)) { const m = new THREE.MeshStandardMaterial({ color: new THREE.Color(hex), roughness: o.rough ?? S.mat3dRough, metalness: 0, ...o.extra }); m.name = o.name || ('mat_' + hex.slice(1)); matCache.set(key, m); } return matCache.get(key); }
+export function mat(S, hex, o = {}) { const key = hex + JSON.stringify(o) + S.mat3dRough + '|g' + (o.glow || 0); if (!matCache.has(key)) { const m = new THREE.MeshStandardMaterial({ color: new THREE.Color(hex), roughness: o.rough ?? S.mat3dRough, metalness: 0, ...o.extra }); if (o.glow) { m.emissive = new THREE.Color(hex); m.emissiveIntensity = o.glow; } m.name = o.name || ('mat_' + hex.slice(1)); matCache.set(key, m); } return matCache.get(key); }
 const outlineMat = new THREE.MeshBasicMaterial({ color: 0x121018, side: THREE.BackSide }); outlineMat.name = 'mat_outline';
 function withOutline(mesh, S) { if (!S.outline3d) return mesh; const o = new THREE.Mesh(mesh.geometry, outlineMat); o.name = mesh.name + '_outline'; o.scale.setScalar(1 + S.outline3d / Math.max(0.3, Math.min(mesh.scale.x, mesh.scale.y, mesh.scale.z) || 1) * 0.06); mesh.add(o); return mesh; }
 const shade = (hex, f) => { const c = new THREE.Color(hex); c.multiplyScalar(f); return '#' + c.getHexString(); };
@@ -26,16 +26,27 @@ export function numberTexture(n) { if (!numTex.has(n)) { const t = new THREE.Can
 // 炮台：6 个元素（左履带、右履带、车身、炮塔、炮管、数字牌）——参考放大核对
 export function makeShooter(S, color, Wd) {
   const hex = colorHex(S, color), dark = shade(hex, 0.78), { w, d, h } = Wd.SH, G = new THREE.Group(); G.name = 'shooter_' + color;
+  const body = new THREE.Group(); body.name = 'body'; const upper = new THREE.Group(); upper.name = 'upper';
   const rb = (W2, H2, D2, r) => new RoundedBoxGeometry(W2, H2, D2, 2, r);
-  // 参考：两侧履带（深色，前后圆头）+ 圆鼓鼓的车身 + 大圆顶炮塔 + 炮塔后上方短炮管（朝方块）+ 炮塔顶白色数字
+  // 参考：下半身(履带+车身)与上半身(炮塔+炮管+数字)可独立 yaw —— 射击时两者都会转向目标
   const trackG = rb(w * 0.24, h * 0.46, d, 0.2);
-  for (const sx of [-1, 1]) { const t = new THREE.Mesh(trackG, mat(S, dark)); t.name = sx < 0 ? 'track_L' : 'track_R'; t.position.set(sx * w * 0.38, h * 0.23, 0); G.add(withOutline(t, S)); }
-  const hull = new THREE.Mesh(rb(w * 0.66, h * 0.5, d * 0.92, 0.22), mat(S, hex)); hull.name = 'hull'; hull.position.set(0, h * 0.42, 0.0); G.add(withOutline(hull, S));
-  const tur = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 14, 0, Math.PI * 2, 0, Math.PI / 2), mat(S, hex)); tur.name = 'turret'; tur.scale.set(w * 0.36, h * 0.5, d * 0.4); tur.position.set(0, h * 0.62, 0.08); G.add(withOutline(tur, S));
-  const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.3, d * 0.42, 16), mat(S, hex)); bar.name = 'barrel'; bar.rotation.x = -Math.PI / 2 + 0.6; bar.position.set(0, h * 0.86, -d * 0.25); G.add(withOutline(bar, S));
-  const lab = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 0.95), new THREE.MeshBasicMaterial({ map: numberTexture(200), transparent: true, depthWrite: false, depthTest: false })); lab.name = 'label'; lab.renderOrder = 5; lab.position.set(0, h * 1.18, 0.1); G.add(lab);
-  G.userData.label = lab; G.userData.color = color;
+  for (const sx of [-1, 1]) { const t = new THREE.Mesh(trackG, mat(S, dark)); t.name = sx < 0 ? 'track_L' : 'track_R'; t.position.set(sx * w * 0.38, h * 0.23, 0); body.add(withOutline(t, S)); }
+  const hull = new THREE.Mesh(rb(w * 0.66, h * 0.5, d * 0.92, 0.22), mat(S, hex)); hull.name = 'hull'; hull.position.set(0, h * 0.42, 0.0); body.add(withOutline(hull, S));
+  const tur = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 14, 0, Math.PI * 2, 0, Math.PI / 2), mat(S, hex)); tur.name = 'turret'; tur.scale.set(w * 0.36, h * 0.5, d * 0.4); tur.position.set(0, h * 0.62, 0.08); upper.add(withOutline(tur, S));
+  const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.3, d * 0.42, 16), mat(S, hex)); bar.name = 'barrel'; bar.rotation.x = -Math.PI / 2 + 0.6; bar.position.set(0, h * 0.86, -d * 0.25); upper.add(withOutline(bar, S));
+  const lab = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 0.95), new THREE.MeshBasicMaterial({ map: numberTexture(200), transparent: true, depthWrite: false, depthTest: false })); lab.name = 'label'; lab.renderOrder = 5; lab.position.set(0, h * 1.18, 0.1); upper.add(lab);
+  G.add(body, upper); G.userData.body = body; G.userData.upper = upper; G.userData.label = lab; G.userData.color = color;
   return G;
+}
+// 白球 + 软光晕（参考珠链略大/更亮）
+export function makeBall(S) {
+  const g = new THREE.Group(); g.name = 'ball';
+  const core = new THREE.Mesh(geos(S).ball, mat(S, '#ffffff', { name: 'mat_ball', rough: 0.22, glow: S.ballGlow || 0 })); core.name = 'ball_core'; g.add(core);
+  if (S.ballHalo > 1 && S.ballHaloOp > 0) {
+    const halo = new THREE.Mesh(geos(S).ball, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: S.ballHaloOp, depthWrite: false, toneMapped: false }));
+    halo.name = 'ball_halo'; halo.scale.setScalar(S.ballHalo); halo.renderOrder = 2; g.add(halo);
+  }
+  return g;
 }
 export function create3D(opt = {}) {
   let renderer = null, scene, camera, sun, hemi, Wd, S0, L0, voxMesh, voxIdx = [], base, slotMeshes = [], cap = 0;
@@ -68,7 +79,7 @@ export function create3D(opt = {}) {
     if (!o) {
       let obj; const k = it.asset;
       if (k.startsWith('shooter_')) obj = makeShooter(S0, k.slice(8), Wd);
-      else if (k === 'ball') { obj = new THREE.Mesh(geos(S0).ball, mat(S0, '#ffffff', { name: 'mat_ball', rough: 0.25 })); obj.name = 'ball'; }
+      else if (k === 'ball') { obj = makeBall(S0); }
       else if (k.startsWith('debris_')) { obj = new THREE.Mesh(geos(S0).debris, mat(S0, colorHex(S0, k.slice(7)), { name: 'mat_debris_' + k.slice(7) })); obj.name = 'debris'; }
       else return null;
       o = { obj, asset: k, used: false }; pool.set(it.id, o); scene.add(obj);
@@ -79,7 +90,11 @@ export function create3D(opt = {}) {
     for (const o of pool.values()) o.used = false;
     for (const it of items) {
       if (!IS3D(it.asset) || !it.w) continue; const o = getObj(it); if (!o) continue; o.used = true; const ob = o.obj;
-      ob.position.set(it.w[0], it.w[1], it.w[2]); ob.rotation.set(it.rx || 0, it.ry || 0, it.rz || 0);
+      ob.position.set(it.w[0], it.w[1], it.w[2]); ob.rotation.set(it.rx || 0, 0, it.rz || 0);
+      // 射击转向：下半身 body.ry、上半身 upper.ry（参考：履带车身与炮塔都会跟着转）
+      if (ob.userData.body) ob.userData.body.rotation.y = it.bodyYaw ?? it.ry ?? 0;
+      if (ob.userData.upper) ob.userData.upper.rotation.y = it.turretYaw ?? it.bodyYaw ?? it.ry ?? 0;
+      else if (it.ry) ob.rotation.y = it.ry;
       const s = it.ws ?? 1; if (it.asset === 'ball') ob.scale.setScalar(S.ballR * s); else if (it.asset.startsWith('debris')) ob.scale.setScalar(s); else ob.scale.set(s * (it.wsx ?? 1), s * (it.wsy ?? 1), s * (it.wsz ?? 1));
       if (ob.userData.label) { const lab = ob.userData.label, n = it.num; if (lab.userData.n !== n) { lab.material.map = numberTexture(n); lab.material.needsUpdate = true; lab.userData.n = n; } lab.material.opacity = it.numOp ?? 1; lab.visible = n != null && (it.numOp ?? 1) > 0.01; lab.quaternion.copy(camera.quaternion); ob.updateMatrixWorld(); const pq = new THREE.Quaternion(); ob.getWorldQuaternion(pq); lab.quaternion.premultiply(pq.invert()); }
       ob.visible = (it.op ?? 1) > 0.01;

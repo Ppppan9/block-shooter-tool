@@ -1,7 +1,7 @@
 // AE 3D 外观精灵：用页面同一套 three.js 模型（makeShooter / 体素圆角方块 / 小球 / 碎屑 / 槽位 / 底座）在页面相机下离屏渲染，裁剪成透明 PNG。
 // 精灵在参考点 P_REF 处渲染：AE 图层缩放 = 该位置 1 格的投影宽 / 参考点 1 格投影宽（相机近正交，误差 <1%）。
 import * as THREE from 'three';
-import { makeShooter, geos, mat, colorHex } from '../three/scene3d.js';
+import { makeShooter, makeBall, geos, mat, colorHex } from '../three/scene3d.js';
 import { DW, DH } from '../world.js';
 export const P_REF = [0, 0, 6];
 export function buildSprites(S, L, Wd, K = 1.5) {
@@ -25,7 +25,7 @@ export function buildSprites(S, L, Wd, K = 1.5) {
     snap('vox_' + col, place(new THREE.Mesh(geos(S).vox, mat(S, colorHex(S, col))), P_REF, Wd.vs), P_REF);
     snap('debris_' + col, place(new THREE.Mesh(geos(S).debris, mat(S, colorHex(S, col))), P_REF, 1), P_REF);
   }
-  snap('ball', place(new THREE.Mesh(geos(S).ball, mat(S, '#ffffff', { rough: 0.25 })), P_REF, S.ballR), P_REF);
+  snap('ball', place(makeBall(S), P_REF, S.ballR), P_REF);
   { const m = new THREE.Mesh(geos(S).slot, mat(S, S.slotColor, { rough: 0.5 })); m.scale.set(S.slotR, 1, S.slotR * 0.92); snap('slot', place(m, [P_REF[0], 0.04, P_REF[2]]), [P_REF[0], 0.04, P_REF[2]]); }
   { const b = Wd.base, RB = geos(S).baseGeo; const m = new THREE.Mesh(new THREE.BoxGeometry(b.x1 - b.x0, b.y1 - b.y0, b.z1 - b.z0), mat(S, S.baseColor)); m.position.set((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, (b.z0 + b.z1) / 2); m.updateMatrixWorld(); snap('base', m, null, true); }
   rd.dispose(); rd.forceContextLoss && rd.forceContextLoss();

@@ -21,7 +21,7 @@ export function createWorld(S, L) {
   const slots = REF_SLOTS.slice(0, SLOTS).map(([x, z]) => [x, z]);
   const front = REF_FRONT.slice(0, COLS);
   const queuePos = (c, r) => [front[c][0] + r * 0.0, front[c][1] + r * SH.row]; // 参考：列方向 ≈ +z（col1 far x -6.54 @ z 35.7）
-  const muzzleOf = (x, z) => [x, SH.h + 0.35, z - SH.d * 0.62]; // 炮管口（炮管朝向方块，略向上）
+  const muzzleOf = (x, z, yaw = 0) => { const d = SH.d * 0.62; return [x - Math.sin(yaw) * d, SH.h + 0.35, z - Math.cos(yaw) * d]; }; // 炮管口随 yaw 转向（默认朝 -Z 方块）
   const base = { x0: -W / 2 * vs - S.baseMargin, x1: W / 2 * vs + S.baseMargin, z0: -D * vs - S.baseMargin, z1: S.baseFront, y0: -S.baseThick, y1: 0, r: S.baseRadius };
   const cellOf = (x, y, z) => { const i = Math.floor(x / vs + W / 2), j = Math.floor(y / vs), k = Math.floor(-z / vs); return i < 0 || j < 0 || k < 0 || i >= W || j >= H || k >= D ? -1 : idx(L, i, j, k); };
   return { W, H, D, vs, cam, vox, proj, un, slots, front, queuePos, muzzleOf, base, cellOf, SH };

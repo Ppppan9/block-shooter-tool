@@ -1,6 +1,6 @@
 // 设置定义：所有可调参数。版本号 + 迁移（通用分组、键名、标签与麻将 / 打螺丝 / 咖啡工具一致，见 ref/TOOLKIT_STANDARD.md）
 import { DEFAULT_HAND } from './default_hand.js';
-export const SETTINGS_VERSION = 1;
+export const SETTINGS_VERSION = 2;
 export const STORE_KEY = 'blockShooterTool.settings';
 export const APP_ID = 'block-shooter-tool';
 // [key, 标签, 类型, 默认, min, max, step]  类型: range/color/bool/select/text/file/button
@@ -51,7 +51,10 @@ export const GROUPS = [
     ['voxRound', '方块圆角(×格)', 'range', 0.16, 0, 0.45, 0.01],
     ['outline3d', '卡通描边粗细(炮台)', 'range', 0.6, 0, 2, 0.05],
     ['numBackOpacity', '后排炮台数字不透明度(参考≈0.45)', 'range', 0.45, 0, 1, 0.01],
-    ['ballR', '小球半径(格)', 'range', 0.3, 0.1, 0.8, 0.01],
+    ['ballR', '小球半径(格；观感靠自发光+光晕略放大)', 'range', 0.3, 0.1, 0.8, 0.01],
+    ['ballGlow', '小球自发光强度(参考软光晕)', 'range', 0.55, 0, 2, 0.05],
+    ['ballHalo', '小球光晕相对半径', 'range', 1.55, 1, 2.5, 0.05],
+    ['ballHaloOp', '小球光晕不透明度', 'range', 0.32, 0, 0.8, 0.01],
   ]],
   ['3D 渲染（three.js，离线打包）', [
     ['cam3dFov', '相机视角 FOV(°，按参考拟合≈3.35)', 'range', 3.35, 1, 60, 0.05],
@@ -79,7 +82,14 @@ export const GROUPS = [
     ['advanceDur', '队列前移(ms)', 'range', 200, 30, 1500, 10],
     ['leaveDur', '弹药打光离场(ms)', 'range', 380, 50, 2000, 10],
     ['popDur', '方块消除缩小(ms)', 'range', 110, 0, 1000, 10],
-    ['debrisCount', '每个方块碎屑数', 'range', 2, 0, 8, 1],
+    ['debrisCount', '每个方块碎屑数(参考更浓≈5)', 'range', 5, 0, 12, 1],
+    ['debrisLife', '碎屑存在时间(ms)', 'range', 750, 100, 3000, 50],
+    ['debrisSize', '碎屑尺寸(格)', 'range', 0.26, 0.05, 0.8, 0.01],
+    ['debrisSpread', '碎屑飞散速度', 'range', 1.35, 0.2, 3, 0.05],
+    ['bobAmp', '备选队列呼吸起伏幅度(格，参考≈0.1)', 'range', 0.1, 0, 0.5, 0.01],
+    ['bobPeriod', '备选队列呼吸周期(ms，参考≈550)', 'range', 550, 200, 3000, 10],
+    ['aimSpeed', '射击时车身转向速度(°/秒)', 'range', 420, 0, 1200, 10],
+    ['turretExtra', '炮塔相对车身额外转角(°，参考上半身更跟手)', 'range', 8, 0, 45, 1],
     ['recoil', '射击后坐(格)', 'range', 0.12, 0, 0.6, 0.01],
     ['pressScale', '点击炮台按下缩小', 'range', 0.1, 0, 0.3, 0.01],
     ['loseRule', '失败判定', 'select', 'on', [['on', '5 槽全满且都无目标 → 失败'], ['off', '不判失败']]],
@@ -179,7 +189,7 @@ export function migrate(obj) {
     mv('handImg', 'handImage'); mv('sfxVol', 'sfxVolume'); mv('sfx', 'sfxMute', x => !x); mv('recTail', 'tailSec', x => Math.round(x / 100) / 10); mv('endText', 'endTitle');
     v = 1;
   }
-  const OLD = {}; // 版本 → 旧默认（仍等于旧默认才替换）；v1 为首版
+  const OLD = { 2: { debrisCount: 2 } }; // 版本 → 旧默认（仍等于旧默认才替换）；v1 为首版
   for (const nv of Object.keys(OLD).map(Number).sort((a, b) => a - b)) if (v < nv) { for (const k in OLD[nv]) if (s[k] === OLD[nv][k]) delete s[k]; v = nv; }
   const out = { ...DEFS };
   for (const k in DEFS) if (k in s && typeof s[k] === typeof DEFS[k]) out[k] = s[k];

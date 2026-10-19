@@ -1,5 +1,14 @@
 # PROGRESS（方块射击核玩工具 block-shooter-tool）
 
+## v1.0.2（2026-10-19）
+- ✅ 备选队列呼吸起伏（`bobAmp`/`bobPeriod`，仅视觉 bobY，相位按 id 错开）
+- ✅ 射击时车身+炮塔 yaw（`body`/`upper` 分组；`aimSpeed`/`turretExtra`）；弹道仍从默认炮口
+- ✅ 碎屑更密：`debrisCount` 2→5、`debrisLife`/`debrisSize`/`debrisSpread` 可调
+- ✅ 白球光晕：`ballGlow`/`ballHalo`/`ballHaloOp`（物理半径仍 0.3）
+- ✅ 正面可打规则保持；test:logic / test:clip PASS
+
+# PROGRESS（方块射击核玩工具 block-shooter-tool）
+
 ## v1.0.1（2026-10-19）
 - ✅ 射击目标改为仅「正面朝向炮台」外露（`frontExposedAt` / `isFrontTarget`）；渲染仍用任意面 `exposedAt`
 - ✅ 去掉 `pickTargetLOS` 隧道/竖井钻内腔弹道；选目标稳定序 (k,j,i)
