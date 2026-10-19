@@ -1,3 +1,8 @@
+## v1.0.5（2026-10-19）
+- **邻块果冻挤动**：命中消除时半径内邻块径向位移 + 挤压鼓包（`neighborImpulse`/`neighborRadius`/`neighborDur`），~150–300ms 回弹；仅视觉，不改 `shootableAt`
+- 保留命中格果冻碎裂 + 球 flash 消失；`SETTINGS_VERSION` 5
+- `test:logic` / `test:clip` PASS；Pages 发布
+
 # 进度
 
 ## v1.0.4（2026-10-19）

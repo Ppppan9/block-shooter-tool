@@ -58,7 +58,7 @@ function newGame() {
 }
 function startLevel(Lnew) {
   L = Lnew; st = initState(L); finishedAt = 0; failedAt = 0; window.__finished = false; window.__failed = false; lastT = now();
-  G = { shooters: [], queues: L.queues.map(() => []), slots: new Array(SLOTS).fill(null), balls: [], pops: [], debris: [], planIdx: 0, shots: 0 };
+  G = { shooters: [], queues: L.queues.map(() => []), slots: new Array(SLOTS).fill(null), balls: [], pops: [], debris: [], wobbles: [], planIdx: 0, shots: 0 };
   L.queues.forEach((q, c) => q.forEach((s, r) => { const sh = { id: G.shooters.length, plan: s, color: s.color, ammo: s.ammo, left: s.ammo, col: c, state: 'queue', row: r, rowFrom: r, rowT: -1e9, slot: -1, t0: 0, fireNext: 0, recoilT: -1e9, pressT: -1e9, inFlight: 0, yaw: 0, aimYaw: 0, turretYaw: 0 }; G.shooters.push(sh); G.queues[c].push(sh); }));
   rebuild();
   if (aeActive()) { aeRec.start(); updateAEButtons(); }
@@ -203,6 +203,8 @@ function step(t) {
             t0: t, s: S.debrisSize * (big ? 0.85 + R() * 0.7 : 0.4 + R() * 0.55), rot: R() * 6, squash: big ? 1.15 : 1,
           });
         }
+        // 邻块果冻挤动（仅视觉：径向位移 + 挤压缩放，不改逻辑/可打集）
+        impulseNeighbors(b.m, t);
         // 极短白闪后消失（~70ms），不进入长 bounce
         b.ph = 'flash'; b.tb = t; b.flashMs = 70;
       }
@@ -227,6 +229,8 @@ function step(t) {
   for (const d of G.debris) { d.v[1] -= g * dt; d.p = [d.p[0] + d.v[0] * dt, d.p[1] + d.v[1] * dt, d.p[2] + d.v[2] * dt]; d.rot += dt * 8; }
   G.debris = G.debris.filter(d => t - d.t0 < S.debrisLife);
   G.pops = G.pops.filter(p => t - p.t0 < S.popDur);
+  const nDur = Math.max(1, S.neighborDur ?? 260);
+  G.wobbles = (G.wobbles || []).filter(w => t - w.t0 < nDur);
   // 胜负
   if (!finishedAt && st.total === 0 && !G.balls.some(b => b.ph === 'fly')) { finishedAt = t; onFinish(); }
   if (!finishedAt && !failedAt && S.loseRule === 'on' && G.slots.every(s => s && s.state === 'slot') && !G.balls.some(b => b.ph === 'fly') && G.slots.every(s => s.left > 0 && st.left[s.color] > 0 && availCount(L, st, s.color) <= 0)) { failedAt = t; sfx.play('error', S); status('槽位已满且都没有可打的方块（失败）——点“↻ 重新开始”'); window.__failed = true; }
@@ -261,7 +265,24 @@ function scene(t) {
   out.sort((a, b) => a.z - b.z);
   return out;
 }
-// 体素渲染列表：每色 [格子号, 缩放]（外露方块 + 正在缩小消失的方块）
+// 命中邻块径向挤动：6 邻 + 对角环（半径 neighborRadius），视觉 only
+function impulseNeighbors(hitN, t) {
+  const radius = S.neighborRadius ?? 1.75, impulse = S.neighborImpulse ?? 0.55;
+  if (impulse <= 0 || radius <= 0) return;
+  const [hi, hj, hk] = coords(L, hitN), rCeil = Math.ceil(radius + 1e-6);
+  if (!G.wobbles) G.wobbles = [];
+  for (let di = -rCeil; di <= rCeil; di++) for (let dj = -rCeil; dj <= rCeil; dj++) for (let dk = -rCeil; dk <= rCeil; dk++) {
+    if (!di && !dj && !dk) continue;
+    const dist = Math.hypot(di, dj, dk); if (dist > radius + 1e-6) continue;
+    const i = hi + di, j = hj + dj, k = hk + dk;
+    if (i < 0 || j < 0 || k < 0 || i >= L.W || j >= L.H || k >= L.D) continue;
+    const m = idx(L, i, j, k); if (!st.vox[m]) continue;
+    // 6 邻满强度，对角/更远按半径衰减；世界径向 x~i y~j z~-k
+    const fall = dist <= 1.01 ? 1 : Math.max(0, 1 - (dist - 1) / Math.max(0.05, radius - 1));
+    G.wobbles.push({ n: m, t0: t, rx: di, ry: dj, rz: -dk, amp: impulse * fall });
+  }
+}
+// 体素渲染列表：每色 [格子号, sx, sy?, sz?, ox?, oy?, oz?]（外露 + 果冻消除 + 邻块挤动）
 function voxGroups(t) {
   // 外露方块 + 紧贴其内侧的一层（圆角缝隙处不会透出底座 / 背景）；按状态版本缓存
   if (!voxGroups.c || voxGroups.c.st !== st || voxGroups.c.ver !== (st.ver || 0)) {
@@ -271,6 +292,31 @@ function voxGroups(t) {
     voxGroups.c = { st, ver: st.ver || 0, base };
   }
   const gr = voxGroups.c.base.map(l => l.slice());
+  // 邻块果冻挤动：径向位移 + 挤压/鼓包缩放，叠多个命中
+  const nDur = Math.max(1, S.neighborDur ?? 260), vs = Wd.vs;
+  if (G.wobbles && G.wobbles.length) {
+    const acc = new Map(); // n -> [sx,sy,sz,ox,oy,oz]
+    for (const w of G.wobbles) {
+      const u = clamp01((t - w.t0) / nDur);
+      // 快冲出再缓回（~20% 达峰，其余回弹）
+      const env = u < 0.22 ? Math.sin((Math.PI / 2) * (u / 0.22)) : Math.cos((Math.PI / 2) * ((u - 0.22) / 0.78));
+      const len = Math.hypot(w.rx, w.ry, w.rz) || 1;
+      const nx = w.rx / len, ny = w.ry / len, nz = w.rz / len;
+      const a = w.amp * env;
+      const push = a * vs * 0.85; // 世界位移（参考：邻块挤出格缝）
+      const bulge = a * 0.72; // 非均匀缩放：沿径向鼓、切向略压
+      let e = acc.get(w.n); if (!e) { e = [1, 1, 1, 0, 0, 0]; acc.set(w.n, e); }
+      e[3] += nx * push; e[4] += ny * push; e[5] += nz * push;
+      // 轴向分解鼓包（近似 soft-body）
+      e[0] *= 1 + bulge * (Math.abs(nx) * 1.15 - (1 - Math.abs(nx)) * 0.28);
+      e[1] *= 1 + bulge * (Math.abs(ny) * 1.15 - (1 - Math.abs(ny)) * 0.28);
+      e[2] *= 1 + bulge * (Math.abs(nz) * 1.15 - (1 - Math.abs(nz)) * 0.28);
+    }
+    for (const list of gr) for (let q = 0; q < list.length; q++) {
+      const row = list[q], e = acc.get(row[0]); if (!e) continue;
+      list[q] = [row[0], (row[1] ?? 1) * e[0], (row[2] ?? row[1] ?? 1) * e[1], (row[3] ?? row[1] ?? 1) * e[2], e[3], e[4], e[5]];
+    }
+  }
   for (const p of G.pops) {
     const c = L.palette.indexOf(p.color); if (c < 0) continue;
     const u = clamp01((t - p.t0) / Math.max(1, S.popDur)), j = S.jellyPop ?? 1;

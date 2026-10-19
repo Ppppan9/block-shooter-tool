@@ -36,6 +36,7 @@ npm run test:cursor  # hideCursor + 默认麻将手指
 - `screenshots/queue_bob_*.png`、`aim_yaw_fire.png`：队列呼吸 / 射击转向
 - `screenshots/v103_*.png`：v1.0.3 任意外露面命中 / 前两行呼吸 / 果冻消除 / 球与描边
 - `screenshots/v104_*.png`：v1.0.4 正面可打 / 珍珠白珠 / 缎面果冻方块 / 命中碎裂球消失；`v104_hit_metrics.json`
+- `screenshots/v105_*.png`：v1.0.5 命中邻块果冻挤动（径向鼓包/回弹）
 - `screenshots/shape_*.png`：图片导入关
 - `screenshots/ae_export_check.jpg`、`export3d_blender_compare.jpg`：导出校验
 

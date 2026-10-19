@@ -1,0 +1,24 @@
+{
+  "best": {
+    "peakAmp": 0.4360990303835759,
+    "peakAge": 33.34000000002561,
+    "nActive": 17,
+    "wobbles": 17,
+    "pops": 1,
+    "debris": 12,
+    "maxOff": 0.3706841758260395,
+    "maxScaleDelta": 0.3610899971576007,
+    "offSamples": 13,
+    "wobbleRows": 17,
+    "t": 1516.9700000011653,
+    "shots": 3
+  },
+  "settings": {
+    "neighborImpulse": 0.55,
+    "neighborRadius": 1.75,
+    "neighborDur": 260,
+    "jellyPop": 1.25,
+    "version": "migrate-ok"
+  },
+  "pageErrs": []
+}

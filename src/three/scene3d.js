@@ -83,10 +83,10 @@ export function create3D(opt = {}) {
     if (opt.exportMode) voxMesh.forEach(m => scene.remove(m));
   }
   const M4 = new THREE.Matrix4(), Q = new THREE.Quaternion(), V3 = new THREE.Vector3(), SC = new THREE.Vector3();
-  // frame = { vox: [ [n, sx, sy?, sz?] ... ] 按颜色分组；消除时可非均匀果冻缩放 }
+  // frame = { vox: [ [n, sx, sy?, sz?, ox?, oy?, oz?] ... ]；消除果冻缩放 + 邻块挤动位移 }
   function setVoxels(groups) {
     groups.forEach((list, c) => { let m = voxMesh[c]; if (list.length > m.instanceMatrix.count) { const nm = new THREE.InstancedMesh(m.geometry, m.material, Math.ceil(list.length * 1.3) + 16); nm.name = m.name; nm.frustumCulled = false; scene.remove(m); m.dispose(); scene.add(nm); voxMesh[c] = m = nm; }
-      for (let q = 0; q < list.length; q++) { const row = list[q], n = row[0], sx = row[1] ?? 1, sy = row[2] ?? sx, sz = row[3] ?? sx, p = Wd.vox(n); V3.set(p[0], p[1], p[2]); SC.set(Wd.vs * sx, Wd.vs * sy, Wd.vs * sz); M4.compose(V3, Q.identity(), SC); m.setMatrixAt(q, M4); }
+      for (let q = 0; q < list.length; q++) { const row = list[q], n = row[0], sx = row[1] ?? 1, sy = row[2] ?? sx, sz = row[3] ?? sx, ox = row[4] || 0, oy = row[5] || 0, oz = row[6] || 0, p = Wd.vox(n); V3.set(p[0] + ox, p[1] + oy, p[2] + oz); SC.set(Wd.vs * sx, Wd.vs * sy, Wd.vs * sz); M4.compose(V3, Q.identity(), SC); m.setMatrixAt(q, M4); }
       m.count = list.length; m.instanceMatrix.needsUpdate = true; });
   }
   function getObj(it) {

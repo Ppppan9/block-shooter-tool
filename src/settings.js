@@ -1,6 +1,6 @@
 // 设置定义：所有可调参数。版本号 + 迁移（通用分组、键名、标签与麻将 / 打螺丝 / 咖啡工具一致，见 ref/TOOLKIT_STANDARD.md）
 import { DEFAULT_HAND } from './default_hand.js';
-export const SETTINGS_VERSION = 4;
+export const SETTINGS_VERSION = 5;
 export const STORE_KEY = 'blockShooterTool.settings';
 export const APP_ID = 'block-shooter-tool';
 // [key, 标签, 类型, 默认, min, max, step]  类型: range/color/bool/select/text/file/button
@@ -85,6 +85,9 @@ export const GROUPS = [
     ['leaveDur', '弹药打光离场(ms)', 'range', 380, 50, 2000, 10],
     ['popDur', '方块消除(ms，含果冻挤压/碎裂)', 'range', 220, 0, 1000, 10],
     ['jellyPop', '果冻消除挤压/拉长强度', 'range', 1.25, 0, 2, 0.05],
+    ['neighborImpulse', '命中邻块果冻挤动强度', 'range', 0.55, 0, 1.2, 0.02],
+    ['neighborRadius', '邻块影响半径(格，含对角)', 'range', 1.75, 0, 3, 0.05],
+    ['neighborDur', '邻块挤动回弹(ms)', 'range', 260, 80, 600, 10],
     ['debrisCount', '每个方块碎屑数(果冻碎裂≈12)', 'range', 12, 0, 20, 1],
     ['debrisLife', '碎屑存在时间(ms)', 'range', 900, 100, 3000, 50],
     ['debrisSize', '碎屑尺寸(格，软糖块)', 'range', 0.34, 0.05, 0.8, 0.01],
@@ -198,6 +201,8 @@ export function migrate(obj) {
     3: { outline3d: 0.6, ballGlow: 0.55, ballHalo: 1.55, ballHaloOp: 0.32, mat3dRough: 0.8, light3dSun: 2.1, light3dAmbient: 1.25, light3dElev: 62, popDur: 110, debrisCount: 5 },
     // v4：正面可打 + 果冻圆角/缎面方块 + 珍珠白珠
     4: { voxGap: 0.04, voxRound: 0.16, ballR: 0.3, ballGlow: 0.28, ballHalo: 1.65, ballHaloOp: 0.2, light3dSun: 2.35, light3dAmbient: 1.15, light3dElev: 68, voxRough: 0.36, ballLife: 1100, popDur: 160, jellyPop: 1, debrisCount: 8, debrisLife: 750, debrisSize: 0.26, debrisSpread: 1.35 },
+    // v5：邻块果冻挤动（新键直接取 DEFS，无需旧默认替换）
+    5: {},
   }; // 版本 → 旧默认（仍等于旧默认才替换）
   for (const nv of Object.keys(OLD).map(Number).sort((a, b) => a - b)) if (v < nv) { for (const k in OLD[nv]) if (s[k] === OLD[nv][k]) delete s[k]; v = nv; }
   const out = { ...DEFS };
