@@ -1,6 +1,6 @@
 // 设置定义：所有可调参数。版本号 + 迁移（通用分组、键名、标签与麻将 / 打螺丝 / 咖啡工具一致，见 ref/TOOLKIT_STANDARD.md）
 import { DEFAULT_HAND } from './default_hand.js';
-export const SETTINGS_VERSION = 8;
+export const SETTINGS_VERSION = 9;
 export const STORE_KEY = 'blockShooterTool.settings';
 export const APP_ID = 'block-shooter-tool';
 // [key, 标签, 类型, 默认, min, max, step]  类型: range/color/bool/select/text/file/button
@@ -220,6 +220,8 @@ export function migrate(obj) {
     7: {},
     // v8：方块贴合无缝（略重叠 + 较小圆角）；仍等于旧默认才替换
     8: { voxGap: 0.06, voxRound: 0.26 },
+    // v9：H5 多尺寸自适应（壳层，无新键）
+    9: {},
   }; // 版本 → 旧默认（仍等于旧默认才替换）
   for (const nv of Object.keys(OLD).map(Number).sort((a, b) => a - b)) if (v < nv) { for (const k in OLD[nv]) if (s[k] === OLD[nv][k]) delete s[k]; v = nv; }
   const out = { ...DEFS };
