@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { createWorld, DW, DH, SH } from './world.js';
 import { createAERecorder } from './ae/recorder.js';
 import { export3D } from './export3d/export3d.js';
+import { exportH5PlayableFromPage, applyPlayableMode } from './h5/index.js';
 import { buildSprites } from './ae/sprites3d.js';
 
 let S = loadSettings(); let r3d = null;
@@ -480,7 +481,8 @@ function aeStop() { const r = aeRec.rec; recClosed = true; updateAEButtons(); if
 async function aeStopAndExport() { const r = aeStop(); if (!r) { toast('没有记录到内容'); return null; } return doExportAE(true, r); }
 const curRec = () => aeActive() ? aeRec.rec : aeLastRec && aeLastRec.L === L ? aeLastRec : null;
 function updateAEButtons() { const b = document.getElementById('btn_aeToggle'); if (!b) return; b.textContent = aeActive() ? `■ 停止并导出（${((now() - (aeRec.rec.t0 || now())) / 1000).toFixed(1)}s）` : '● 开始记录'; b.classList.toggle('on', aeActive()); }
-const PANEL_ACTIONS = { aeToggle: () => aeActive() ? aeStopAndExport() : recStart(), aeExport: () => doExportAE(), export3d: () => doExport3D() };
+async function doExportH5() { try { return await exportH5PlayableFromPage({ toolId: 'block-shooter-tool', S, status, toast }); } catch (e) { status('H5 导出失败：' + e.message); console.error(e); return null; } }
+const PANEL_ACTIONS = { aeToggle: () => aeActive() ? aeStopAndExport() : recStart(), aeExport: () => doExportAE(), export3d: () => doExport3D(), exportH5: () => doExportH5() };
 function recTailDone(t) { return finishedAt && t - finishedAt > (S.endCard ? S.endDelay + 400 : 0) + Math.max(800, S.tailSec * 1000); }
 function download(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.textContent = `⬇ ${name} (${(blob.size / 1e6).toFixed(1)}MB)`; document.getElementById('recList').prepend(a); a.click(); }
 async function doExportAE(save = true, r0 = curRec()) {
@@ -540,6 +542,7 @@ function buildPanel() {
     });
     if (title.startsWith('手指')) det.insertAdjacentHTML('beforeend', '<div class="tip">默认手指 = 麻将工具同款手图（旋转/翻转/大小/指尖锚点同麻将默认值）。上传透明背景 PNG 可替换，用锚点 X/Y 标定指尖位置。</div>');
     if (title.startsWith('导入')) det.insertAdjacentHTML('beforeend', '<div class="tip">任意带透明通道的 PNG/WebP：缩放到“体素列数”宽，每个像素 → 一根沿深度方向的体素柱（alpha ≤ 阈值 = 无方块），颜色量化后生成对应颜色的炮台；生成器保证可解（每个炮台弹药 ≤ 当时可打的同色外露方块数）。</div>');
+    if (title.startsWith('导出 H5')) det.insertAdjacentHTML('beforeend', '<div class="tip">导出 ZIP 含所选渠道子目录（tiktok/google/mintegral/generic）。试玩包无设置面板，仅游戏画面+CTA；体积告警默认 5MB（three.js 工具体积较大时可能超限）。</div>');
     body.append(det);
   });
 }
@@ -555,6 +558,11 @@ document.getElementById('btnExport').onclick = () => { const a = document.create
 document.getElementById('btnImport').onclick = () => document.getElementById('importFile').click();
 document.getElementById('importFile').onchange = e => { const f = e.target.files[0]; if (!f) return; f.text().then(t => { const j = JSON.parse(t); S = migrate(j); saveSettings(S); buildPanel(); loadHand(); newGame(); toast('已导入设置'); }).catch(() => toast('导入失败')); };
 document.getElementById('btnReset').onclick = () => { if (!confirm('恢复全部默认设置？')) return; S = { ...DEFS }; saveSettings(S); buildPanel(); loadHand(); newGame(); };
-window.__game = { renderAt: t => { window.__vclock = t; step(t); updPress(t); draw(t); if (aeActive()) aeRec.sample(t); }, get items() { return draw.items || []; }, get world() { return Wd; }, get G() { return G; }, create3D, autoSolve, newGame, tapShooter, tapAt, hitShooter, shooterScreen, scene: () => scene(now()), voxGroups: () => voxGroups(now()), doExportAE, doExport3D, aeRec, aeStart: () => recStart(), aeStop: () => aeStop(), aeActive: () => aeActive(), get aeLastRec() { return aeLastRec; }, get mediaRec() { return rec; }, startRec, stopRec, get S() { return S; }, get r3d() { return r3d; }, set(k, v) { S[k] = v; applyChange(k); buildPanel(); }, get st() { return st; }, get L() { return L; }, get hand() { return hand; }, view: () => view(), shooterWorld: (sh, t) => shooterWorld(sh, t), shooterBox: () => shooterBox(), voxGeoSize: () => { const g = geos(S).vox; g.computeBoundingBox(); const b = g.boundingBox; return [b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z]; }, shooterParts: () => { const m = makeShooter(S, 'green', Wd), out = []; m.traverse(c => { if (['track_L', 'track_R', 'hull', 'turret', 'barrel', 'label'].includes(c.name)) out.push(c.name); }); return out; }, get shapeGen() { return shapeCache.gen || 0; }, get autoRunning() { return autoRunning; }, nextAuto, loadLevel: Lx => { autoToken++; autoRunning = false; startLevel(Lx); }, migrate, APP_ID, sphereHitsVox: (p, r, s) => sphereHitsVox(p, r, s) };
+const __h5 = applyPlayableMode({
+  applySettings: (ps) => { Object.assign(S, ps); saveSettings(S); },
+  autoPlay: () => { try { autoSolve(); } catch (e) { } },
+});
+if (__h5) { try { const panel = document.getElementById('panel'); if (panel) panel.style.display = 'none'; } catch (e) { } }
+window.__game = { renderAt: t => { window.__vclock = t; step(t); updPress(t); draw(t); if (aeActive()) aeRec.sample(t); }, get items() { return draw.items || []; }, get world() { return Wd; }, get G() { return G; }, create3D, autoSolve, newGame, tapShooter, tapAt, hitShooter, shooterScreen, scene: () => scene(now()), voxGroups: () => voxGroups(now()), doExportAE, doExport3D, doExportH5, aeRec, aeStart: () => recStart(), aeStop: () => aeStop(), aeActive: () => aeActive(), get aeLastRec() { return aeLastRec; }, get mediaRec() { return rec; }, startRec, stopRec, get S() { return S; }, get r3d() { return r3d; }, set(k, v) { S[k] = v; applyChange(k); buildPanel(); }, get st() { return st; }, get L() { return L; }, get hand() { return hand; }, view: () => view(), shooterWorld: (sh, t) => shooterWorld(sh, t), shooterBox: () => shooterBox(), voxGeoSize: () => { const g = geos(S).vox; g.computeBoundingBox(); const b = g.boundingBox; return [b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z]; }, shooterParts: () => { const m = makeShooter(S, 'green', Wd), out = []; m.traverse(c => { if (['track_L', 'track_R', 'hull', 'turret', 'barrel', 'label'].includes(c.name)) out.push(c.name); }); return out; }, get shapeGen() { return shapeCache.gen || 0; }, get autoRunning() { return autoRunning; }, nextAuto, loadLevel: Lx => { autoToken++; autoRunning = false; startLevel(Lx); }, migrate, APP_ID, sphereHitsVox: (p, r, s) => sphereHitsVox(p, r, s) };
 buildPanel(); loadHand(); newGame();
 requestAnimationFrame(loop);

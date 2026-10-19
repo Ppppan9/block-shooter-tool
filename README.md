@@ -4,6 +4,9 @@
 
 在线：https://ppppan9.github.io/block-shooter-tool/
 
+## v1.0.7：导出 H5 试玩广告
+- 新增面板「导出 H5 试玩广告」（在导出 3D 之后）：一键导出 ZIP，含 TikTok/Pangle、Google Ads Playable、Mintegral、Generic 四个渠道子目录；试玩包无编辑器面板，仅游戏画面 + CTA；设置版本 7。`npm run test:h5` → `screenshots/block_shooter_h5_sample.zip`。
+
 ## 玩法
 - **体素关卡**：参考关 31×13×46（紫壳 + 绿菱形漏斗 + 正面绿中线 + 黑/黄夹层）；随机生成 / 导入透明 PNG/WebP（每像素 → 一根体素柱，alpha = 无方块，颜色量化）。
 - **6 列队列 + 5 个槽位**：点击队首炮台 → 跳到最左空槽；槽内同色**正面朝向炮台外露**目标自动射击（约 12 发/秒；一发一格）；弹药打光离场；无目标时等待。

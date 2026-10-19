@@ -1,7 +1,7 @@
 {
   "name": "block-shooter-tool",
-  "version": "1.0.6",
-  "description": "\u65b9\u5757\u5c04\u51fb\u6838\u73a9\u5de5\u5177\uff08\u5355\u6587\u4ef6\u79bb\u7ebf\u7248\uff09",
+  "version": "1.0.7",
+  "description": "方块射击核玩工具（单文件离线版）",
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
@@ -13,7 +13,8 @@
     "test:clip": "node test/clip-test.mjs",
     "test:shape": "node test/shape-test.mjs",
     "test:norec": "node test/no-autorec.mjs",
-    "test:cursor": "node test/cursor-test.mjs"
+    "test:cursor": "node test/cursor-test.mjs",
+    "test:h5": "node test/h5-export.mjs"
   },
   "repository": {
     "type": "git",
