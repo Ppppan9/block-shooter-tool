@@ -90,7 +90,7 @@ const playableHtml = makePlayableHtml(baseHtml, {
   autoPlay: false,
 });
 console.log('Responsive smoke…');
-const smoke = await runResponsiveSmoke({ html: playableHtml, settleMs: 1200 });
+const smoke = await runResponsiveSmoke({ html: playableHtml, settleMs: 1200, ...(process.env.H5_QUICK === '1' ? { viewports: [{ name: 'iPhone 12/13', width: 390, height: 844, touch: true }] } : {}) });
 console.log(formatSmokeReport(smoke));
 const reportPath = path.join(outDir, 'h5_responsive_smoke.json');
 fs.writeFileSync(reportPath, JSON.stringify(smoke, null, 2));
@@ -103,7 +103,7 @@ console.log('Responsive OK', smoke.results.length, 'viewports');
 // Per-channel black-stage + console-error + CTA-hook smoke (all channels)
 {
   const { runAllChannelChecks } = await import('../src/h5/channel-smoke.mjs');
-  const ch = await runAllChannelChecks({ baseHtml, toolId: 'block-shooter-tool', outDir, fixturesDir: path.join(root, 'src/h5/fixtures') });
+  const ch = await runAllChannelChecks({ baseHtml, toolId: 'block-shooter-tool', outDir, fixturesDir: path.join(root, 'src/h5/fixtures'), endSettings: { level: 'random', randW: 4, randH: 2, randD: 2, randColors: 2, autoSpeed: 6 }, defaultHand: (fs.existsSync(path.join(root, 'src/default_hand.js')) ? (await import('../src/default_hand.js')).DEFAULT_HAND : '') });
   fs.writeFileSync(path.join(outDir, 'h5_channel_sizes.json'), JSON.stringify(ch.sizes, null, 2));
   if (!ch.ok) { console.error('FAIL channel smoke'); process.exit(1); }
   console.log('Channel smoke OK', Object.entries(ch.sizes).map(([k, v]) => k + '=' + (v / 1048576).toFixed(2) + 'MB').join(' '));

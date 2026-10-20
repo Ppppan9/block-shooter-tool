@@ -1,7 +1,7 @@
 // 设置定义：所有可调参数。版本号 + 迁移（通用分组、键名、标签与麻将 / 打螺丝 / 咖啡工具一致，见 ref/TOOLKIT_STANDARD.md）
 import { DEFAULT_HAND } from './default_hand.js';
 import { h5DeviceSelectOptions } from './h5/index.js';
-export const SETTINGS_VERSION = 11;
+export const SETTINGS_VERSION = 12;
 export const STORE_KEY = 'blockShooterTool.settings';
 export const APP_ID = 'block-shooter-tool';
 // [key, 标签, 类型, 默认, min, max, step]  类型: range/color/bool/select/text/file/button
@@ -190,7 +190,7 @@ export const GROUPS = [
     ['h5GameName', '游戏名（可选）', 'text', '方块射击'],
     ['h5Icon', '应用图标（可选，透明PNG）', 'file', ''],
     ['h5MaxMb', '体积告警阈值(MB)', 'range', 5, 1, 20, 0.5],
-    ['h5AutoPlay', '打开试玩后自动通关演示', 'bool', true],
+    ['h5AutoPlay', '打开试玩后自动通关演示', 'bool', false],
   ]],
   ['结束页(End Card)', [
     ['endCard', '显示结束页', 'bool', false],
@@ -231,6 +231,8 @@ export function migrate(obj) {
     // v11：H5 机型分辨率对齐 Chrome（14 Pro Max 430×932、Fold5 外屏 344×882、iPad Pro 13 1032×1376；新增 14 Plus）
     11: {},
   }; // 版本 → 旧默认（仍等于旧默认才替换）
+  // v12：试玩由玩家自己玩 → 自动演示默认关（一次性）；旧「全部」→ 8 渠道
+  if (v < 12) { s.h5AutoPlay = false; if (s.h5Format === 'tiktok,google,mintegral,generic') s.h5Format = 'applovin,facebook,google,mintegral,moloco,tiktok,unity,generic'; }
   for (const nv of Object.keys(OLD).map(Number).sort((a, b) => a - b)) if (v < nv) { for (const k in OLD[nv]) if (s[k] === OLD[nv][k]) delete s[k]; v = nv; }
   const out = { ...DEFS };
   for (const k in DEFS) if (k in s && typeof s[k] === typeof DEFS[k]) out[k] = s[k];
