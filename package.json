@@ -1,6 +1,6 @@
 {
   "name": "block-shooter-tool",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "description": "方块射击核玩工具（单文件离线版）",
   "type": "module",
   "scripts": {
